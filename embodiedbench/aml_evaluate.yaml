@@ -2,7 +2,7 @@ description: EmbodiedBench evaluation with models served via VLLM
 
 target:
   service: sing
-  name: palisades27
+  name: palisades27  # 24/27
   workspace_name: lalidenamlws
 
 environment:
@@ -102,13 +102,31 @@ search:
     - export ALSA_CARD=-1
     - export SDL_AUDIODRIVER=dummy
     - export SDL_VIDEODRIVER=dummy
+    - export DISPLAY=:1
+    - export HYDRA_FULL_ERROR=1
 
     # Model API configuration
-    - export remote_url=http://localhost:8000/v1/chat/completions
     - export server_url=http://localhost:8000/v1/chat/completions
+
+    # Verify VLLM server is responding
+    - echo "Verifying VLLM server health..."
+    - curl -s http://localhost:8000/health || echo "Health check failed"
+    - curl -s http://localhost:8000/v1/models || echo "Models endpoint failed"
+
+    # Clean up any existing AI2THOR processes and pipes
+    - echo "Cleaning up existing AI2THOR processes..."
+    - pkill -f "thor-Linux64" || echo "No thor processes to kill"
+    - pkill -f "Unity" || echo "No Unity processes to kill"
+    - rm -rf /tmp/thor_* || echo "No thor temp files to clean"
+    - rm -rf ~/.ai2thor/ || echo "No ai2thor cache to clean"
 
     # Run evaluation
     - echo "--= Running EmbodiedBench Evaluation =--"
+    - echo "Environment variables:"
+    - echo "DISPLAY=$$DISPLAY"
+    - echo "server_url=$$server_url"
+    - echo "XDG_RUNTIME_DIR=$$XDG_RUNTIME_DIR"
+    - ps aux | grep Xvfb || echo "No Xvfb processes found"
     - timeout 1800 python -m embodiedbench.main env=eb-alf model_name=$$MODEL_NAME model_type="custom" exp_name={model_config}
 
     submit_args:
@@ -128,4 +146,4 @@ search:
   - name: model_config
     spec: discrete
     values:
-    - Qwen2.5-VL-7B-Instruct_SFT_C::magmathor/training/checkpoints/Qwen2.5-VL-7B-Instruct__sft__llamafactory_ai2thor_correct-only_tag_bs1_accum1_lr1e-5_cosine_0.1_ft_llm_qwen_base_pix_25088_50176_model_multinode/checkpoint-2100/
+    - test::training/checkpoints/Qwen2.5-VL-7B-Instruct__sft__llamafactory_ai2thor_correct-only_tag_bs1_accum1_lr1e-5_cosine_0.1_ft_llm_qwen_base_pix_25088_50176_model_multinode/checkpoint-2100/

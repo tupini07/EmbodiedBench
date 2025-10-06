@@ -5,6 +5,7 @@ import numpy as np
 from collections import Counter, OrderedDict
 from embodiedbench.envs.eb_alfred.env.tasks import get_task
 from ai2thor.controller import Controller
+from ai2thor.platform import Linux64
 import embodiedbench.envs.eb_alfred.gen.utils.image_util as image_util
 from embodiedbench.envs.eb_alfred.gen.utils import game_util
 from embodiedbench.envs.eb_alfred.gen.utils.game_util import get_objects_of_type, get_obj_of_type_closest_to_obj
@@ -25,13 +26,25 @@ class ThorEnv(Controller):
                  player_screen_width=constants.DETECTION_SCREEN_WIDTH,
                  quality='MediumCloseFitShadows',
                  build_path=constants.BUILD_PATH):
+        import sys
         self.task = None
 
-        super().__init__(quality=quality)
+        print(f"ThorEnv.__init__: Starting initialization with quality={quality}, x_display={x_display}", flush=True)
+        sys.stdout.flush()
+        print(f"ThorEnv.__init__: About to call Controller.__init__ WITH platform=Linux64...", flush=True)
+        sys.stdout.flush()
+        super().__init__(quality=quality, platform=Linux64)
+        print(f"ThorEnv.__init__: Controller.__init__ completed successfully", flush=True)
+        sys.stdout.flush()
+
         self.local_executable_path = build_path
+        print(f"ThorEnv.__init__: About to call start() method...", flush=True)
+        sys.stdout.flush()
         self.start(x_display=x_display,
                    player_screen_height=player_screen_height,
                    player_screen_width=player_screen_width)
+        print(f"ThorEnv.__init__: start() method completed successfully", flush=True)
+        sys.stdout.flush()
         self.task = None
 
         # internal states

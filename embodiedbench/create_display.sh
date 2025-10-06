@@ -3,12 +3,16 @@ set -e
 
 echo "--= Create Display =--"
 
-display="90"
+display="1"
 
 echo "Starting Xvfb :$display..."
 Xvfb :$display -screen 0 1024x1024x24 -ac +extension GLX +render -noreset &
 
-DISPLAY=":$display"
+export DISPLAY=":$display"
+echo "Set DISPLAY=$DISPLAY"
+
+# Wait for Xvfb to start
+sleep 3
 
 # Run a tiny initialization to force Unity to start and create Player.log
 echo "--= Running AI2Thor initialization... =--"

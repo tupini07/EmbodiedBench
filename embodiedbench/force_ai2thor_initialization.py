@@ -50,3 +50,7 @@ except Exception as e:
 finally:
     if controller is not None:
         controller.stop()
+        # Add small delay to ensure cleanup completes
+        import time
+        time.sleep(3)
+        print("AI2THOR controller stopped and cleaned up")

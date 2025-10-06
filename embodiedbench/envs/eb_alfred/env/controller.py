@@ -440,10 +440,7 @@ class Controller(object):
 
             # numbers.Integral works for numpy.int32/64 and Python int
             if not isinstance(self.gpu_device, numbers.Integral) or self.gpu_device < 0:
-                raise ValueError(
-                    "Invalid gpu_device: '%s'. gpu_device must be >= 0"
-                    % self.gpu_device
-                )
+                raise ValueError("Invalid gpu_device: '%s'. gpu_device must be >= 0" % self.gpu_device)
             elif cuda_visible_devices:
                 if self.gpu_device >= len(cuda_visible_devices):
                     raise ValueError(
@@ -464,32 +461,21 @@ class Controller(object):
             self.x_display = ":" + self.x_display
 
         if quality not in QUALITY_SETTINGS:
-            valid_qualities = [
-                q
-                for q, v in sorted(QUALITY_SETTINGS.items(), key=lambda qv: qv[1])
-                if v > 0
-            ]
+            valid_qualities = [q for q, v in sorted(QUALITY_SETTINGS.items(), key=lambda qv: qv[1]) if v > 0]
 
             raise ValueError(
-                "Quality {} is invalid, please select from one of the following settings: ".format(
-                    quality
-                )
+                "Quality {} is invalid, please select from one of the following settings: ".format(quality)
                 + ", ".join(valid_qualities)
             )
         elif QUALITY_SETTINGS[quality] == 0:
             raise ValueError(
                 "Quality {} is associated with an index of 0. "
-                "Due to a bug in unity, this quality setting would be ignored.".format(
-                    quality
-                )
+                "Due to a bug in unity, this quality setting would be ignored.".format(quality)
             )
 
         if server_class is None and platform_system() == "Windows":
             self.server_class = ai2thor.wsgi_server.WsgiServer
-        elif (
-            isinstance(server_class, ai2thor.fifo_server.FifoServer)
-            and platform_system() == "Windows"
-        ):
+        elif isinstance(server_class, ai2thor.fifo_server.FifoServer) and platform_system() == "Windows":
             raise ValueError("server_class=FifoServer cannot be used on Windows.")
         elif server_class is None:
             self.server_class = ai2thor.fifo_server.FifoServer
@@ -529,9 +515,7 @@ class Controller(object):
             if "continuous" in self.initialization_parameters:
                 warnings.warn(
                     "Warning: 'continuous' is deprecated and will be ignored,"
-                    " use 'snapToGrid={}' instead.".format(
-                        not self.initialization_parameters["continuous"]
-                    ),
+                    " use 'snapToGrid={}' instead.".format(not self.initialization_parameters["continuous"]),
                     DeprecationWarning,
                 )
 
@@ -544,9 +528,7 @@ class Controller(object):
             if "continuousMode" in self.initialization_parameters:
                 warnings.warn(
                     "Warning: 'continuousMode' is deprecated and will be ignored,"
-                    " use 'snapToGrid={}' instead.".format(
-                        not self.initialization_parameters["continuousMode"]
-                    ),
+                    " use 'snapToGrid={}' instead.".format(not self.initialization_parameters["continuousMode"]),
                     DeprecationWarning,
                 )
 
@@ -570,8 +552,7 @@ class Controller(object):
 
                 # check for bot as well, for backwards compatibility support
                 if (
-                    unity_initialization_parameters.get("agentMode", "default").lower()
-                    in {"locobot", "bot"}
+                    unity_initialization_parameters.get("agentMode", "default").lower() in {"locobot", "bot"}
                     and robothor_scenes_in_build
                 ):
                     # get the first robothor scene
@@ -680,8 +661,7 @@ class Controller(object):
 
             if (
                 scene in self.robothor_scenes()
-                and self.initialization_parameters.get("agentMode", "default").lower()
-                != "locobot"
+                and self.initialization_parameters.get("agentMode", "default").lower() != "locobot"
             ):
                 warnings.warn(
                     "You are using a RoboTHOR scene without using the standard LoCoBot.\n"
@@ -700,8 +680,7 @@ class Controller(object):
         # if Python is running against the Unity Editor then
         # ChangeResolution won't have an affect, so it gets skipped
         if (self.server.unity_proc is not None) and (
-            target_width != self.last_event.screen_width
-            or target_height != self.last_event.screen_height
+            target_width != self.last_event.screen_width or target_height != self.last_event.screen_height
         ):
             self.step(
                 action="ChangeResolution",
@@ -724,9 +703,7 @@ class Controller(object):
         agent_mode = self.initialization_parameters.get("agentMode", "default")
         if agent_mode.lower() == "bot":
             self.initialization_parameters["agentMode"] = "locobot"
-            warnings.warn(
-                "On reset and upon initialization, agentMode='bot' has been renamed to agentMode='locobot'."
-            )
+            warnings.warn("On reset and upon initialization, agentMode='bot' has been renamed to agentMode='locobot'.")
 
         self.last_event = self.step(
             action="Initialize",
@@ -845,11 +822,7 @@ class Controller(object):
         makedirs(self.releases_dir)
 
         # sort my mtime ascending, keeping the 3 most recent, attempt to prune anything older
-        all_dirs = list(
-            filter(
-                os.path.isdir, map(lambda x: os.path.join(rdir, x), os.listdir(rdir))
-            )
-        )
+        all_dirs = list(filter(os.path.isdir, map(lambda x: os.path.join(rdir, x), os.listdir(rdir))))
         dir_stats = defaultdict(lambda: 0)
         for d in all_dirs:
             try:
@@ -909,13 +882,13 @@ class Controller(object):
 
     def multi_step_physics(self, action, timeStep=0.05, max_steps=20):
         events = []
-        self.step(action=dict(action="PausePhysicsAutoSim")) #raise_for_failure=True)
+        self.step(action=dict(action="PausePhysicsAutoSim"))  # raise_for_failure=True)
         events.append(self.step(action))
         while not self.last_event.metadata["isSceneAtRest"]:
             events.append(
                 self.step(
                     action=dict(action="AdvancePhysicsStep", timeStep=timeStep),
-                    #raise_for_failure=True,
+                    # raise_for_failure=True,
                 )
             )
 
@@ -923,14 +896,14 @@ class Controller(object):
                 events.append(
                     self.step(
                         action=dict(action="UnpausePhysicsAutoSim"),
-                        #raise_for_failure=True,
+                        # raise_for_failure=True,
                     )
                 )
                 break
 
         return events
 
-    def step(self, action: Union[str, Dict[str, Any]]=None, **action_args):
+    def step(self, action: Union[str, Dict[str, Any]] = None, **action_args):
 
         if isinstance(action, Dict):
             action = copy.deepcopy(action)  # prevent changes from leaking
@@ -948,9 +921,7 @@ class Controller(object):
 
         # XXX should be able to get rid of this with some sort of deprecation warning
         if "AI2THOR_VISIBILITY_DISTANCE" in os.environ:
-            action["visibilityDistance"] = float(
-                os.environ["AI2THOR_VISIBILITY_DISTANCE"]
-            )
+            action["visibilityDistance"] = float(os.environ["AI2THOR_VISIBILITY_DISTANCE"])
 
         self.last_action = action
 
@@ -995,8 +966,7 @@ class Controller(object):
         except Exception as e:
             self.server.stop()
             raise (TimeoutError if isinstance(e, TimeoutError) else RuntimeError)(
-                f"Error encountered when running action {action}"
-                f" in scene {self.last_event.metadata['sceneName']}."
+                f"Error encountered when running action {action}" f" in scene {self.last_event.metadata['sceneName']}."
             )
 
         if not self.last_event.metadata["lastActionSuccess"]:
@@ -1008,9 +978,7 @@ class Controller(object):
             ]:
                 raise ValueError(self.last_event.metadata["errorMessage"])
             elif raise_for_failure:
-                raise RuntimeError(
-                    self.last_event.metadata.get("errorMessage", f"{action} failed")
-                )
+                raise RuntimeError(self.last_event.metadata.get("errorMessage", f"{action} failed"))
 
         return self.last_event
 
@@ -1022,9 +990,11 @@ class Controller(object):
         if headless:
             command += " -batchmode -nographics"
         else:
-            command += (
-                " -screen-fullscreen %s -screen-quality %s -screen-width %s -screen-height %s"
-                % (fullscreen, QUALITY_SETTINGS[self.quality], width, height)
+            command += " -screen-fullscreen %s -screen-quality %s -screen-width %s -screen-height %s" % (
+                fullscreen,
+                QUALITY_SETTINGS[self.quality],
+                width,
+                height,
             )
 
         if self.gpu_device is not None:
@@ -1039,10 +1009,7 @@ class Controller(object):
                     vulkan_result = None
                     try:
                         vulkan_result = subprocess.run(
-                            ["vulkaninfo"],
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.DEVNULL,
-                            universal_newlines=True
+                            ["vulkaninfo"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, universal_newlines=True
                         )
                     except FileNotFoundError:
                         pass
@@ -1072,7 +1039,7 @@ class Controller(object):
                             ["nvidia-smi", "-L"],
                             stdout=subprocess.PIPE,
                             stderr=subprocess.DEVNULL,
-                            universal_newlines=True
+                            universal_newlines=True,
                         )
                     except FileNotFoundError:
                         pass
@@ -1106,7 +1073,7 @@ class Controller(object):
                 else:
                     with open(cuda_vulkan_mapping_path, "r") as f:
                         # JSON dictionaries always have strings as keys, need to re-map here
-                        cuda_vulkan_mapping = {int(k):v for k, v in json.load(f).items()}
+                        cuda_vulkan_mapping = {int(k): v for k, v in json.load(f).items()}
 
             command += f" -force-device-index {cuda_vulkan_mapping[self.gpu_device]}"
 
@@ -1123,10 +1090,10 @@ class Controller(object):
 
         # print("Viewer: http://%s:%s/viewer" % (host, port))
 
+        logger.warning("((_start_unity_thread))")
+
         command = self.unity_command(width, height, self.headless)
-        env.update(
-            self._build.platform.launch_env(self.width, self.height, self.x_display)
-        )
+        env.update(self._build.platform.launch_env(self.width, self.height, self.x_display))
 
         makedirs(self.log_dir)
         self.server.unity_proc = proc = subprocess.Popen(
@@ -1217,18 +1184,14 @@ class Controller(object):
                 payload = cache_payload
             else:
                 try:
-                    res = requests.get(
-                        "https://api.github.com/repos/allenai/ai2thor/commits?sha=%s"
-                        % branch
-                    )
+                    res = requests.get("https://api.github.com/repos/allenai/ai2thor/commits?sha=%s" % branch)
                     if res.status_code == 404:
                         raise ValueError("Invalid branch name: %s" % branch)
                     elif res.status_code == 403:
                         payload, _ = self._get_cache_commit_history(branch)
                         if payload:
                             warnings.warn(
-                                "Error retrieving commits: %s - using cached commit history for %s"
-                                % (res.text, branch)
+                                "Error retrieving commits: %s - using cached commit history for %s" % (res.text, branch)
                             )
                         else:
                             res.raise_for_status()
@@ -1241,26 +1204,20 @@ class Controller(object):
                     payload, _ = self._get_cache_commit_history(branch)
                     if payload:
                         warnings.warn(
-                            "Unable to connect to github.com: %s - using cached commit history for %s"
-                            % (e, branch)
+                            "Unable to connect to github.com: %s - using cached commit history for %s" % (e, branch)
                         )
                     else:
                         raise Exception(
-                            "Unable to get commit history for branch %s and no cached history exists: %s"
-                            % (branch, e)
+                            "Unable to get commit history for branch %s and no cached history exists: %s" % (branch, e)
                         )
 
         return [c["sha"] for c in payload]
 
     def local_commits(self):
 
-        git_dir = os.path.normpath(
-            os.path.dirname(os.path.realpath(__file__)) + "/../.git"
-        )
+        git_dir = os.path.normpath(os.path.dirname(os.path.realpath(__file__)) + "/../.git")
         commits = (
-            subprocess.check_output(
-                "git --git-dir=" + git_dir + " log -n 10 --format=%H", shell=True
-            )
+            subprocess.check_output("git --git-dir=" + git_dir + " log -n 10 --format=%H", shell=True)
             .decode("ascii")
             .strip()
             .split("\n")
@@ -1281,25 +1238,19 @@ class Controller(object):
 
         if local_build:
 
-            releases_dir = os.path.normpath(
-                os.path.dirname(os.path.realpath(__file__)) + "/../unity/builds"
-            )
+            releases_dir = os.path.normpath(os.path.dirname(os.path.realpath(__file__)) + "/../unity/builds")
             commits = [
                 ai2thor.build.LOCAL_BUILD_COMMIT_ID
             ] + commits  # we add the commits to the list to allow the ci_build to succeed
 
-        request = ai2thor.platform.Request(
-            platform_system(), self.width, self.height, self.x_display, self.headless
-        )
+        request = ai2thor.platform.Request(platform_system(), self.width, self.height, self.x_display, self.headless)
 
         if platform is None:
             candidate_platforms = ai2thor.platform.select_platforms(request)
         else:
             candidate_platforms = [platform]
 
-        builds = self.find_platform_builds(
-            candidate_platforms, request, commits, releases_dir, local_build
-        )
+        builds = self.find_platform_builds(candidate_platforms, request, commits, releases_dir, local_build)
         if not builds:
             platforms_message = ",".join(map(lambda p: p.name(), candidate_platforms))
             if commit_id:
@@ -1323,10 +1274,7 @@ class Controller(object):
         for build in builds:
             if build.platform.is_valid(request):
                 # don't emit warnings for CloudRendering since we allow it to fallback to a default
-                if (
-                    build.commit_id != commits[0]
-                    and build.platform != ai2thor.platform.CloudRendering
-                ):
+                if build.commit_id != commits[0] and build.platform != ai2thor.platform.CloudRendering:
                     warnings.warn(
                         "Build for the most recent commit: %s is not available.  Using commit build %s"
                         % (commits[0], build.commit_id)
@@ -1338,12 +1286,9 @@ class Controller(object):
         ]
         for build in builds:
             errors = build.platform.validate(request)
-            message = (
-                "Platform %s failed validation with the following errors: %s\n  "
-                % (
-                    build.platform.name(),
-                    "\t\n".join(errors),
-                )
+            message = "Platform %s failed validation with the following errors: %s\n  " % (
+                build.platform.name(),
+                "\t\n".join(errors),
             )
             instructions = build.platform.dependency_instructions(request)
             if instructions:
@@ -1351,20 +1296,14 @@ class Controller(object):
             error_messages.append(message)
         raise Exception("\n".join(error_messages))
 
-    def find_platform_builds(
-        self, candidate_platforms, request, commits, releases_dir, local_build
-    ):
+    def find_platform_builds(self, candidate_platforms, request, commits, releases_dir, local_build):
         builds = []
         for plat in candidate_platforms:
             for commit_id in commits:
-                commit_build = ai2thor.build.Build(
-                    plat, commit_id, self.include_private_scenes, releases_dir
-                )
+                commit_build = ai2thor.build.Build(plat, commit_id, self.include_private_scenes, releases_dir)
 
                 try:
-                    if os.path.isdir(commit_build.base_dir) or (
-                        not local_build and commit_build.exists()
-                    ):
+                    if os.path.isdir(commit_build.base_dir) or (not local_build and commit_build.exists()):
                         builds.append(commit_build)
                         # break out of commit loop, but allow search through all the platforms
                         break
@@ -1395,17 +1334,11 @@ class Controller(object):
             )
 
         if player_screen_width is not None:
-            warnings.warn(
-                "'player_screen_width' parameter is deprecated, use the 'width'"
-                " parameter instead."
-            )
+            warnings.warn("'player_screen_width' parameter is deprecated, use the 'width'" " parameter instead.")
             width = player_screen_width
 
         if player_screen_height is not None:
-            warnings.warn(
-                "'player_screen_height' parameter is deprecated, use the 'height'"
-                " parameter instead."
-            )
+            warnings.warn("'player_screen_height' parameter is deprecated, use the 'height'" " parameter instead.")
             height = player_screen_height
 
         if height <= 0 or width <= 0:
@@ -1413,9 +1346,7 @@ class Controller(object):
 
         if self.server.started:
 
-            warnings.warn(
-                "start method depreciated. The server started when the Controller was initialized."
-            )
+            warnings.warn("start method depreciated. The server started when the Controller was initialized.")
 
             # Stops the current server and creates a new one. This is done so
             # that the arguments passed in will be used on the server.
@@ -1464,9 +1395,7 @@ class Controller(object):
 
 
 class BFSSearchPoint:
-    def __init__(
-        self, start_position, move_vector, heading_angle=0.0, horizon_angle=0.0
-    ):
+    def __init__(self, start_position, move_vector, heading_angle=0.0, horizon_angle=0.0):
         self.start_position = start_position
         self.move_vector = defaultdict(lambda: 0.0)
         self.move_vector.update(move_vector)
@@ -1546,10 +1475,7 @@ class BFSController(Controller):
         while queue:
             point_to_find = queue.pop()
             for p in self.grid_points:
-                dist = math.sqrt(
-                    ((point_to_find["x"] - p["x"]) ** 2)
-                    + ((point_to_find["z"] - p["z"]) ** 2)
-                )
+                dist = math.sqrt(((point_to_find["x"] - p["x"]) ** 2) + ((point_to_find["z"] - p["z"]) ** 2))
 
                 if dist < 0.05:
                     enqueue_island_points(p)
@@ -1570,9 +1496,7 @@ class BFSController(Controller):
 
     def _build_graph_point(self, graph, point):
         for p in self.grid_points:
-            dist = math.sqrt(
-                ((point["x"] - p["x"]) ** 2) + ((point["z"] - p["z"]) ** 2)
-            )
+            dist = math.sqrt(((point["x"] - p["x"]) ** 2) + ((point["z"] - p["z"]) ** 2))
             if dist <= (self.grid_size + 0.01) and dist > 0:
                 graph.add_edge(self.key_for_point(point), self.key_for_point(p))
 
@@ -1604,9 +1528,7 @@ class BFSController(Controller):
     def plan_horizons(self, agent_horizon, target_horizon):
         actions = []
         horizon_step_map = {330: 3, 0: 2, 30: 1, 60: 0}
-        look_diff = (
-            horizon_step_map[int(agent_horizon)] - horizon_step_map[int(target_horizon)]
-        )
+        look_diff = horizon_step_map[int(agent_horizon)] - horizon_step_map[int(target_horizon)]
         if look_diff > 0:
             for i in range(look_diff):
                 actions.append(dict(action="LookDown"))
@@ -1659,9 +1581,7 @@ class BFSController(Controller):
         for p in path[1:]:
             inv_pms = {
                 self.key_for_point(v): k
-                for k, v in self.move_relative_points(
-                    all_points, graph, current_position, current_rotation
-                ).items()
+                for k, v in self.move_relative_points(all_points, graph, current_position, current_rotation).items()
             }
             actions.append(dict(action=inv_pms[p]))
             current_position = all_points[p]
@@ -1695,16 +1615,10 @@ class BFSController(Controller):
                 self.visited_seen_points,
             )
         ):
-            self.enqueue_point(
-                BFSSearchPoint(agent_position, dict(x=-1 * self.grid_size))
-            )
+            self.enqueue_point(BFSSearchPoint(agent_position, dict(x=-1 * self.grid_size)))
             self.enqueue_point(BFSSearchPoint(agent_position, dict(x=self.grid_size)))
-            self.enqueue_point(
-                BFSSearchPoint(agent_position, dict(z=-1 * self.grid_size))
-            )
-            self.enqueue_point(
-                BFSSearchPoint(agent_position, dict(z=1 * self.grid_size))
-            )
+            self.enqueue_point(BFSSearchPoint(agent_position, dict(z=-1 * self.grid_size)))
+            self.enqueue_point(BFSSearchPoint(agent_position, dict(z=1 * self.grid_size)))
             self.visited_seen_points.append(agent_position)
 
     def search_all_closed(self, scene_name):
@@ -1747,9 +1661,7 @@ class BFSController(Controller):
         receptacle_object_pairs = []
         for op in current_receptacle_object_pairs:
             object_id, receptacle_object_id = op.split("||")
-            receptacle_object_pairs.append(
-                dict(receptacleObjectId=receptacle_object_id, objectId=object_id)
-            )
+            receptacle_object_pairs.append(dict(receptacleObjectId=receptacle_object_id, objectId=object_id))
 
         if randomize:
             self.random_initialize(
@@ -1784,16 +1696,10 @@ class BFSController(Controller):
         for gp in self.grid_points:
             found = False
             for x in [1, -1]:
-                found |= (
-                    key_for_point(gp["x"] + (self.grid_size * x), gp["z"])
-                    in final_grid_points
-                )
+                found |= key_for_point(gp["x"] + (self.grid_size * x), gp["z"]) in final_grid_points
 
             for z in [1, -1]:
-                found |= (
-                    key_for_point(gp["x"], (self.grid_size * z) + gp["z"])
-                    in final_grid_points
-                )
+                found |= key_for_point(gp["x"], (self.grid_size * z) + gp["z"]) in final_grid_points
 
             if found:
                 pruned_grid_points.append(gp)
@@ -1822,22 +1728,19 @@ class BFSController(Controller):
                         forceVisible=True,
                     )
                 )
-            if (
-                visibility_object_id is None
-                and obj["objectType"] in visibility_object_types
-            ):
+            if visibility_object_id is None and obj["objectType"] in visibility_object_types:
                 visibility_object_id = obj["objectId"]
 
         for point in self.grid_points:
             self.step(
                 dict(action="Teleport", x=point["x"], y=point["y"], z=point["z"]),
-                #raise_for_failure=True,
+                # raise_for_failure=True,
             )
 
             for rot, hor in product(self.rotations, self.horizons):
                 event = self.step(
                     dict(action="RotateLook", rotation=rot, horizon=hor),
-                    #raise_for_failure=True,
+                    # raise_for_failure=True,
                 )
                 for j in event.metadata["objects"]:
                     if j["receptacle"] and j["visible"]:
@@ -1866,7 +1769,7 @@ class BFSController(Controller):
                                     forceVisible=True,
                                     objectId=j["objectId"],
                                 ),
-                                #raise_for_failure=True,
+                                # raise_for_failure=True,
                             )
                         for pivot_id in range(j["receptacleCount"]):
                             self.step(
@@ -1877,7 +1780,7 @@ class BFSController(Controller):
                                     objectId=visibility_object_id,
                                     pivot=pivot_id,
                                 ),
-                                #raise_for_failure=True,
+                                # raise_for_failure=True,
                             )
                             if self.is_object_visible(visibility_object_id):
                                 receptacle_pivot_points.append(
@@ -1905,7 +1808,7 @@ class BFSController(Controller):
                                     forceVisible=True,
                                     objectId=j["objectId"],
                                 ),
-                                #raise_for_failure=True,
+                                # raise_for_failure=True,
                             )
 
         return receptacle_pivot_points, receptacle_points
@@ -1917,13 +1820,13 @@ class BFSController(Controller):
         for point in self.grid_points:
             self.step(
                 dict(action="Teleport", x=point["x"], y=point["y"], z=point["z"]),
-                #raise_for_failure=True,
+                # raise_for_failure=True,
             )
 
             for rot, hor in product(self.rotations, self.horizons):
                 event = self.step(
                     dict(action="RotateLook", rotation=rot, horizon=hor),
-                    #raise_for_failure=True,
+                    # raise_for_failure=True,
                 )
 
                 object_receptacle = dict()
@@ -1950,30 +1853,23 @@ class BFSController(Controller):
 
     def initialize_scene(self):
         self.target_objects = []
-        self.object_receptacle = defaultdict(
-            lambda: dict(objectId="StartupPosition", pivotSimObjs=[])
-        )
+        self.object_receptacle = defaultdict(lambda: dict(objectId="StartupPosition", pivotSimObjs=[]))
 
         self.open_receptacles = []
         open_pickupable = {}
         pickupable = {}
         is_open = {}
 
-        for obj in filter(
-            lambda x: x["receptacle"], self.last_event.metadata["objects"]
-        ):
+        for obj in filter(lambda x: x["receptacle"], self.last_event.metadata["objects"]):
             for oid in obj["receptacleObjectIds"]:
                 self.object_receptacle[oid] = obj
 
             is_open[obj["objectId"]] = obj["openable"] and obj["isOpen"]
 
-        for obj in filter(
-            lambda x: x["receptacle"], self.last_event.metadata["objects"]
-        ):
+        for obj in filter(lambda x: x["receptacle"], self.last_event.metadata["objects"]):
             for oid in obj["receptacleObjectIds"]:
                 if obj["openable"] or (
-                    obj["objectId"] in self.object_receptacle
-                    and self.object_receptacle[obj["objectId"]]["openable"]
+                    obj["objectId"] in self.object_receptacle and self.object_receptacle[obj["objectId"]]["openable"]
                 ):
 
                     open_pickupable[oid] = obj["objectId"]
@@ -1985,9 +1881,7 @@ class BFSController(Controller):
             shuffled_keys = list(open_pickupable.keys())
             random.shuffle(shuffled_keys)
             for oid in shuffled_keys:
-                position_target = self.object_receptacle[self.target_objects[0]][
-                    "position"
-                ]
+                position_target = self.object_receptacle[self.target_objects[0]]["position"]
                 position_candidate = self.object_receptacle[oid]["position"]
                 dist = math.sqrt(
                     (position_target["x"] - position_candidate["x"]) ** 2
@@ -2004,7 +1898,7 @@ class BFSController(Controller):
             self.open_receptacles.append(roid)
             self.step(
                 dict(action="OpenObject", objectId=roid, forceVisible=True),
-                #raise_for_failure=True,
+                # raise_for_failure=True,
             )
 
     def queue_step(self):
@@ -2032,8 +1926,7 @@ class BFSController(Controller):
 
             if not any(
                 map(
-                    lambda p: distance(p, event.metadata["agent"]["position"])
-                    < self.distance_threshold,
+                    lambda p: distance(p, event.metadata["agent"]["position"]) < self.distance_threshold,
                     self.grid_points,
                 )
             ):
