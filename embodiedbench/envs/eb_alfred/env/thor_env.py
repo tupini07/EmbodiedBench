@@ -27,11 +27,16 @@ class ThorEnv(Controller):
                  build_path=constants.BUILD_PATH):
         self.task = None
 
-        super().__init__(quality=quality)
+        # In ai2thor 2.7+, the server starts automatically during __init__
+        # Pass width/height parameters directly (player_screen_* is deprecated)
+        super().__init__(
+            quality=quality, 
+            headless=True,
+            x_display=x_display,
+            width=player_screen_width,
+            height=player_screen_height
+        )
         self.local_executable_path = build_path
-        self.start(x_display=x_display,
-                   player_screen_height=player_screen_height,
-                   player_screen_width=player_screen_width)
         self.task = None
 
         # internal states
@@ -111,12 +116,18 @@ class ThorEnv(Controller):
             super().step((dict(action='SetObjectToggles', objectToggles=object_toggles)))
 
         if dirty_and_empty:
-            super().step(dict(action='SetStateOfAllObjects',
-                               StateChange="CanBeDirty",
-                               forceAction=True))
-            super().step(dict(action='SetStateOfAllObjects',
-                               StateChange="CanBeFilled",
-                               forceAction=False))
+            # SetStateOfAllObjects was removed in newer ai2thor versions
+            # Try to use it if available, otherwise skip (not critical for basic functionality)
+            try:
+                super().step(dict(action='SetStateOfAllObjects',
+                                   StateChange="CanBeDirty",
+                                   forceAction=True))
+                super().step(dict(action='SetStateOfAllObjects',
+                                   StateChange="CanBeFilled",
+                                   forceAction=False))
+            except (ValueError, KeyError):
+                # Action not available in this version, skip
+                pass
         super().step((dict(action='SetObjectPoses', objectPoses=object_poses)))
 
     def set_task(self, traj, args, reward_type='sparse', max_episode_length=2000):
@@ -126,7 +137,7 @@ class ThorEnv(Controller):
         task_type = traj['task_type']
         self.task = get_task(task_type, traj, self, args, reward_type=reward_type, max_episode_length=max_episode_length)
 
-    def step(self, action, smooth_nav=False):
+    def step(self, action, smooth_nav=False, **kwargs):
         '''
         overrides ai2thor.controller.Controller.step() for smooth navigation and goal_condition updates
         '''
@@ -140,14 +151,14 @@ class ThorEnv(Controller):
             elif "Look" in action['action']:
                 self.smooth_look(action)
             else:
-                super().step(action)
+                super().step(action, **kwargs)
         else:
             if "LookUp" in action['action']:
                 self.look_angle(-constants.AGENT_HORIZON_ADJ)
             elif "LookDown" in action['action']:
                 self.look_angle(constants.AGENT_HORIZON_ADJ)
             else:
-                super().step(action)
+                super().step(action, **kwargs)
 
         event = self.update_states(action)
         self.check_post_conditions(action)

@@ -84,7 +84,20 @@ def startx(display):
         path = path.split('/')[-1]
         with open(path, "w") as f:
             f.write(generate_xorg_conf(devices))
-        command = shlex.split("Xorg -noreset +extension GLX +extension RANDR +extension RENDER -config %s :%s" % (path, display))
+        
+        # Try Xvfb first (for headless servers), fall back to Xorg
+        xvfb_path = subprocess.run(['which', 'Xvfb'], capture_output=True, text=True).stdout.strip()
+        xorg_path = subprocess.run(['which', 'Xorg'], capture_output=True, text=True).stdout.strip()
+        
+        if xvfb_path:
+            # Use Xvfb for headless operation
+            command = shlex.split("Xvfb -screen 0 1024x768x24 :%s" % display)
+        elif xorg_path:
+            # Use Xorg if available
+            command = shlex.split("Xorg -noreset +extension GLX +extension RANDR +extension RENDER -config %s :%s" % (path, display))
+        else:
+            raise Exception("Neither Xvfb nor Xorg found. Please install one of them.")
+        
         subprocess.call(command)
     finally:
         os.close(fd)
