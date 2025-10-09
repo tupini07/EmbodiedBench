@@ -22,34 +22,14 @@ class ThorConnector(ThorEnv):
                  player_screen_width=constants.DETECTION_SCREEN_WIDTH,
                  quality='MediumCloseFitShadows',
                  build_path=constants.BUILD_PATH):
-        import sys
-        print(f"ThorConnector init: x_display={x_display}, screen={player_screen_width}x{player_screen_height}, quality={quality}, build_path={build_path}", flush=True)
-        sys.stdout.flush()
-        print("ThorConnector: About to call ThorEnv.__init__...", flush=True)
-        sys.stdout.flush()
         super().__init__(x_display, player_screen_height, player_screen_width, quality, build_path)
-        print("ThorConnector: ThorEnv initialized successfully", flush=True)
-        sys.stdout.flush()
-        
-        # Try to load font, fall back to default if not available
-        try:
-            self.font = ImageFont.truetype("/usr/share/fonts/truetype/ubuntu/UbuntuMono-B.ttf", 24)
-            print("ThorConnector: Font loaded successfully")
-        except OSError:
-            print("ThorConnector: Ubuntu font not found, using default font")
-            try:
-                self.font = ImageFont.load_default()
-            except:
-                print("ThorConnector: Warning - could not load any font")
-                self.font = None
-        
+        self.font = ImageFont.truetype("/usr/share/fonts/truetype/ubuntu/UbuntuMono-B.ttf", 24)
         self.agent_height = 0.9
         self.cur_receptacle = None
         self.reachable_positions, self.reachable_position_kdtree = None, None
         self.sliced = False
         self.task = None
         self.put_count_dict = {}
-        print("ThorConnector: Initialization completed successfully")
 
     def restore_scene(self, object_poses, object_toggles, dirty_and_empty):
         # print(object_poses)

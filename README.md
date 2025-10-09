@@ -251,29 +251,6 @@ python -m embodiedbench.main env=eb-nav model_name=gpt-4o exp_name='baseline'
 
 conda activate embench_man 
 python -m embodiedbench.main env=eb-man model_name=claude-3-5-sonnet-20241022 exp_name='baseline'
-
-# Example with temperature setting
-python -m embodiedbench.main env=eb-nav model_name=gpt-4o temperature=0.7 exp_name='creative_baseline'
-
-# Example with Azure OpenAI (requires Azure authentication)
-python -m embodiedbench.main env=eb-alf model_name=Qwen/Qwen2-VL-7B-Instruct model_type=azure_openai exp_name='baseline' tp=1
-python -m embodiedbench.main env=eb-alf model_name=o3_2025-04-16 model_type=azure_openai exp_name='baseline' tp=1
-```
-
-#### Azure OpenAI Setup
-To use `model_type=azure_openai`, you need to authenticate with Azure:
-```bash
-# Install Azure CLI and login
-az login
-
-# Or set up service principal authentication
-export DEFAULT_IDENTITY_CLIENT_ID=your_client_id
-```
-
-The Azure OpenAI integration uses Microsoft TRAPI service and supports:
-- **Authentication**: Azure CLI credentials or managed identity
-- **Special handling**: o3 models automatically use temperature=1.0 (required by API)
-- **Endpoint**: Uses `https://trapi.research.microsoft.com/gcr/shared` by default
 ```
 #### Configuration Options
 You can customize the evaluation using the following flags:
@@ -286,13 +263,7 @@ You can customize the evaluation using the following flags:
 - **`model_name`**: Full model name, including proprietary options like:  
   - `'gpt-4o'`, `'gpt-4o-mini'`, `'claude-3-5-sonnet-20241022'`, `'gemini-1.5-pro'`, `'gemini-2.0-flash-exp'`, `'gemini-1.5-flash'`  
 
-- **`model_type`**: Set to `'remote'` by default. Options include:
-  - `'remote'`: Standard API-based model access (default)
-  - `'local'`: Local model execution with tensor parallelism
-  - `'azure_openai'`: Azure OpenAI API with Microsoft TRAPI authentication
-  - `'qwen_instruct'`: Native Qwen2.5-VL-7B-Instruct support using transformers and qwen_vl_utils
-  - `'custom'`: Custom model serving via API endpoint  
-- **`temperature`**: Controls the randomness of model outputs (default: `0.0` for deterministic responses). Higher values (e.g., `0.7` or `1.0`) increase randomness.  
+- **`model_type`**: Set to `'remote'` by default.  
 - **`down_sample_ratio`**: Data sampling ratio (default `1.0`). Use `0.1` for debugging (10% of the dataset).  
 - **`language_only`**: If `True` (or `1`), the agent receives only text input (default: `False`).  
 - **`eval_sets`**: List of subsets to evaluate (default: all subsets).  
@@ -354,19 +325,6 @@ python -m embodiedbench.main env=eb-nav model_name=OpenGVLab/InternVL2_5-38B mod
 
 conda activate embench_man 
 python -m embodiedbench.main env=eb-man model_name=meta-llama/Llama-3.2-11B-Vision-Instruct model_type=local exp_name='baseline' tp=2
-```
-
-#### **Qwen2.5-VL-7B-Instruct Native Support**  
-For Qwen2.5-VL-7B-Instruct, we provide dedicated native support using `model_type=qwen_instruct` which directly uses the transformers library with qwen_vl_utils for optimal performance:
-```bash
-conda activate embench
-python -m embodiedbench.main env=eb-hab model_name=Qwen/Qwen2.5-VL-7B-Instruct model_type=qwen_instruct exp_name='baseline' tp=1
-
-# Use with local checkpoint
-python -m embodiedbench.main env=eb-hab model_name=/path/to/local/checkpoint model_type=qwen_instruct exp_name='baseline' tp=1
-
-# With temperature setting
-python -m embodiedbench.main env=eb-hab model_name=Qwen/Qwen2.5-VL-7B-Instruct model_type=qwen_instruct temperature=0.7 exp_name='baseline' tp=1
 ```
 
 #### **2️⃣ Online Model Serving (Recommended)**  

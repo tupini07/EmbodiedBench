@@ -144,7 +144,7 @@ dependencies:
   - zlib=1.2.13=h5eee18b_1
   - pip:
       - accelerate==0.20.3
-      - ai2thor==4.0.0 #2.1.0 Upgrade to support platform Linux64
+      - ai2thor==2.1.0
       - aiohttp==3.8.5
       - aiosignal==1.3.1
       - antlr4-python3-runtime==4.9.3
@@ -176,7 +176,7 @@ dependencies:
       - guidance==0.0.64
       - gym==0.26.2
       - gym-notices==0.0.8
-      - huggingface-hub>=0.30.0,<1.0 #==0.16.4
+      - huggingface-hub==0.16.4
       - hydra-core==1.3.2
       - idna==3.4
       - importlib-resources==5.2.0

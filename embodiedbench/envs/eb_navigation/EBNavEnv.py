@@ -7,14 +7,16 @@ import json
 import os
 import sys
 import math
-from ai2thor.platform import CloudRendering, Linux64
+from ai2thor.platform import CloudRendering
 from embodiedbench.envs.eb_navigation.utils import draw_target_box, draw_boxes
 from embodiedbench.main import logger
 import copy
 
 SUCCESS_THRESHOLD = 1
 
-ValidEvalSets = ["base", "common_sense", "complex_instruction", "visual_appearance", "long_horizon"]
+ValidEvalSets = [
+    'base', 'common_sense', 'complex_instruction', 'visual_appearance', 'long_horizon'
+]
 
 
 DISCRETE_SKILLSET = [
@@ -38,18 +40,7 @@ DISCRETE_SKILLSET = [
 
 
 class EBNavigationEnv(gym.Env):
-    def __init__(
-        self,
-        eval_set="base",
-        exp_name="test_base",
-        down_sample_ratio=1.0,
-        fov=100,
-        multiview=False,
-        boundingbox=False,
-        multistep=False,
-        resolution=500,
-        selected_indexes=[],
-    ):
+    def __init__(self, eval_set='base', exp_name='test_base', down_sample_ratio=1.0, fov = 100, multiview = False, boundingbox = False, multistep = False,  resolution = 500, selected_indexes =[]):
         """
         A wrapper for AI2-THOR ManipulaTHOR environment.
 
@@ -65,8 +56,7 @@ class EBNavigationEnv(gym.Env):
             "width": self.resolution,
             "height": self.resolution,
             "fieldOfView": fov,
-            # NOTE: Use Linux64 for aml jobs
-            "platform": Linux64,  # CloudRendering
+            "platform": CloudRendering
         }
         self.env = ai2thor.controller.Controller(**self.config)
 
@@ -102,7 +92,7 @@ class EBNavigationEnv(gym.Env):
 
         # set log and verbosity(0 for concise)
         self.feedback_verbosity = 0
-        self.log_path = "running/eb_nav/{}".format(exp_name)
+        self.log_path = 'running/eb_nav/{}'.format(exp_name)
 
         self.multiview = multiview
         self.boundingbox = boundingbox
@@ -115,7 +105,7 @@ class EBNavigationEnv(gym.Env):
         dataset = dataset_split["tasks"]
         if 0 <= self.down_sample_ratio < 1:
             select_every = round(1 / self.down_sample_ratio)
-            dataset = dataset[0 : len(dataset) : select_every]
+            dataset = dataset[0:len(dataset):select_every]
         return dataset
 
     def reset(self, **kwargs):
@@ -128,14 +118,16 @@ class EBNavigationEnv(gym.Env):
         # self.save_episode_log()
         assert self._current_episode_num < self.number_of_episodes
 
-        # start reset environment
+        # start reset environment 
         traj_data = self.dataset[self._current_episode_num]
         self.episode_data = traj_data
         self.episode_language_instruction = traj_data["instruction"]
 
         scene_name = traj_data["scene"]
         logger.info(f"Restoring scene {scene_name}...")
-        self._last_event = self.env.reset(scene=scene_name)
+        self._last_event = self.env.reset(
+            scene=scene_name
+        )
 
         if self.multiview:
             event = self.env.step(action="GetMapViewCameraProperties", raise_for_failure=True)
@@ -153,19 +145,29 @@ class EBNavigationEnv(gym.Env):
         pose = traj_data["agentPose"]
         self.env.step(
             action="Teleport",
-            position={"x": pose["position"]["x"], "y": pose["position"]["y"], "z": pose["position"]["z"]},
-            rotation={"x": 0, "y": pose["rotation"], "z": 0},
+            position={
+                "x": pose["position"]["x"],
+                "y": pose["position"]["y"],
+                "z": pose["position"]["z"]
+            },
+            rotation={
+                "x": 0,
+                "y": pose["rotation"],
+                "z": 0
+            },
             horizon=pose["horizon"],
-            standing=True,
+            standing=True
         )
 
-        # finish reset environment
+        # finish reset environment 
         # reset episode information
         self._current_episode_num += 1
         self._current_step = 0
 
         self.standing = True
-        obs = {"head_rgb": self.env.last_event.frame}
+        obs = {
+            'head_rgb': self.env.last_event.frame
+        }
         self._reset = True
         self.episode_log = []
         self._episode_start_time = time.time()
@@ -173,7 +175,7 @@ class EBNavigationEnv(gym.Env):
         self.img_paths = []
 
         return obs
-
+    
     def discrete_action_mapper(self, action_index):
         """
         Maps a discrete action index to the corresponding iTHOR environment action.
@@ -225,10 +227,13 @@ class EBNavigationEnv(gym.Env):
         #         break
 
         dist = math.sqrt(
-            (agent_position["x"] - target_position["x"]) ** 2 + (agent_position["z"] - target_position["z"]) ** 2
+            (agent_position["x"] - target_position["x"])**2 +
+            (agent_position["z"] - target_position["z"])**2
         )
-        success = dist <= SUCCESS_THRESHOLD
+        success = (dist <= SUCCESS_THRESHOLD)
         return float(success), dist
+
+        
 
     def step(self, action: int, reasoning, i_flag):
         """
@@ -239,52 +244,52 @@ class EBNavigationEnv(gym.Env):
         :return: Event.
         """
 
-        assert self._reset, "Reset env before stepping"
+        assert self._reset, 'Reset env before stepping'
         info = {}
 
         self._current_step += 1
 
-        if self._current_step >= self._max_episode_steps:
+        if self._current_step>=self._max_episode_steps:
 
-            if type(action) != int or action > 7 or action < 0:
+            if type(action)!=int or action > 7 or action < 0:
                 action = np.random.randint(8)
 
             self.discrete_action_mapper(action)
             reward, distance = self.measure_success()
             done = True
-            info["action_description"] = self.language_skill_set[action]
+            info['action_description'] = self.language_skill_set[action]
 
         else:
-            if type(action) != int or action > 7 or action < 0:
+            if type(action)!=int or action > 7 or action < 0:
                 action = np.random.randint(8)
 
             self.discrete_action_mapper(action)
             reward, distance = self.measure_success()
-            if reward > 0:
+            if reward>0:
                 done = True
             else:
                 done = False
-            info["action_description"] = self.language_skill_set[action]
+            info['action_description'] = self.language_skill_set[action]
 
-        # info['action_description'] = self.language_skill_set[action]
+        #info['action_description'] = self.language_skill_set[action]
 
         obs = {
-            "head_rgb": self.env.last_event.frame,
-        }
+                    'head_rgb': self.env.last_event.frame,
+                }
         reward, distance = self.measure_success()
 
         ## test calculate reward
-        info["distance"] = distance
-        info["env_feedback"] = self.get_env_feedback(self._last_event)
-        info["reasoning"] = reasoning
+        info['distance'] = distance
+        info['env_feedback'] = self.get_env_feedback(self._last_event)
+        info['reasoning'] = reasoning
         # info['reflection'] = reasoning['reasoning_and_reflection']
         # info['plan'] = reasoning['language_plan']
-        info["instruction"] = self.episode_language_instruction
-        info["env_step"] = self._current_step
-        info["episode_elapsed_seconds"] = time.time() - self._episode_start_time
-        info["task_success"] = reward
-        info["last_action_success"] = self.env.last_event.metadata["lastActionSuccess"]
-        info["action_id"] = action
+        info['instruction'] = self.episode_language_instruction
+        info['env_step'] = self._current_step
+        info['episode_elapsed_seconds'] = time.time() - self._episode_start_time
+        info['task_success'] = reward
+        info['last_action_success'] = self.env.last_event.metadata['lastActionSuccess']
+        info['action_id'] = action
         # info['reasoning'] = reasoning
 
         self.episode_log.append(info)
@@ -293,11 +298,11 @@ class EBNavigationEnv(gym.Env):
             self.save_episode_log_per_step(1)
         else:
             self.save_episode_log_per_step(0)
-
+        
         self.episode_log = []
 
         return obs, reward, done, info
-
+        
     def get_env_feedback(self, event):
         """
         To extract relevant information from the event to construct a feedback dictionary.
@@ -310,11 +315,12 @@ class EBNavigationEnv(gym.Env):
                 "lastActionSuccess": event.metadata.get("lastActionSuccess", None),
                 "errorMessage": event.metadata.get("errorMessage", None),
                 "lastAction": event.metadata.get("lastAction", None),
+
                 "agent": {
                     "position": event.metadata.get("agent", {}).get("position", {}),
                     "rotation": event.metadata.get("agent", {}).get("rotation", {}),
-                    "is_standing": self.standing,
-                },
+                    "is_standing": self.standing
+                }
             }
         else:
             # Does not provide the specific reason why the action fails if so
@@ -322,10 +328,13 @@ class EBNavigationEnv(gym.Env):
                 "lastActionSuccess": event.metadata.get("lastActionSuccess", None),
                 "lastAction": event.metadata.get("lastAction", None),
                 "errorMessage": event.metadata.get("errorMessage", None),
-                "agent": {"is_standing": self.standing},
+
+                "agent": {
+                    "is_standing": self.standing
+                }
             }
 
-        msg = ""
+        msg = ''
         if feedback["lastActionSuccess"]:
             msg += f"Last action {feedback['lastAction']} executed successfully."
         else:
@@ -335,13 +344,10 @@ class EBNavigationEnv(gym.Env):
     def seed(self, seed=None):
         self.env.random_initilize(seed)
 
+
     def save_image(self, *args, **kwargs):
         """Save current agent view as a PNG image."""
-        episode_idx = (
-            self._current_episode_num
-            if not len(self.selected_indexes)
-            else self.selected_indexes[self._current_episode_num - 1] + 1
-        )
+        episode_idx = self._current_episode_num if not len(self.selected_indexes) else self.selected_indexes[self._current_episode_num - 1] + 1
 
         if not os.path.exists(self.log_path):
             os.makedirs(self.log_path)
@@ -350,27 +356,21 @@ class EBNavigationEnv(gym.Env):
             img2 = Image.fromarray(self.env.last_event.third_party_camera_frames[-1])
             time_stamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
             # image_path = 'episode_{}_step_{}_{}.png'.format(self._current_episode_num, self._current_step, time_stamp)
-            image_path1 = os.path.join(
-                self.log_path, "episode_{}_step_{}_{}_front.png".format(episode_idx, self._current_step, time_stamp)
-            )
-            image_path2 = os.path.join(
-                self.log_path, "episode_{}_step_{}_{}_top.png".format(episode_idx, self._current_step, time_stamp)
-            )
+            image_path1 = os.path.join(self.log_path, 'episode_{}_step_{}_{}_front.png'.format(episode_idx, self._current_step, time_stamp))
+            image_path2 = os.path.join(self.log_path, 'episode_{}_step_{}_{}_top.png'.format(episode_idx, self._current_step, time_stamp))
             img1.save(image_path1)
             img2.save(image_path2)
             return [image_path1, image_path2]
-
+        
         elif self.multistep:
-
+            
             img = Image.fromarray(self.env.last_event.frame)
             time_stamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
             # image_path = 'episode_{}_step_{}_{}.png'.format(self._current_episode_num, self._current_step, time_stamp)
-            image_path = os.path.join(
-                self.log_path, "episode_{}_step_{}_{}_front.png".format(episode_idx, self._current_step, time_stamp)
-            )
+            image_path = os.path.join(self.log_path, 'episode_{}_step_{}_{}_front.png'.format(episode_idx, self._current_step, time_stamp))
             img.save(image_path)
             self.img_paths.append(image_path)
-            if self._current_step < 3:
+            if self._current_step<3:
                 return self.img_paths
             else:
                 return self.img_paths[-3:]
@@ -380,63 +380,50 @@ class EBNavigationEnv(gym.Env):
                 img = Image.fromarray(self.env.last_event.frame)
                 time_stamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
                 # image_path = 'episode_{}_step_{}_{}.png'.format(self._current_episode_num, self._current_step, time_stamp)
-                image_path = os.path.join(
-                    self.log_path, "episode_{}_step_{}_{}_front.png".format(episode_idx, self._current_step, time_stamp)
-                )
+                image_path = os.path.join(self.log_path, 'episode_{}_step_{}_{}_front.png'.format(episode_idx, self._current_step, time_stamp))
                 img.save(image_path)
                 return image_path
             else:
                 img = Image.fromarray(self.env.last_event.frame)
                 time_stamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
                 # image_path = 'episode_{}_step_{}_{}.png'.format(self._current_episode_num, self._current_step, time_stamp)
-                image_path = os.path.join(
-                    self.log_path,
-                    "episode_{}_step_{}_{}_front_bb.png".format(episode_idx, self._current_step, time_stamp),
-                )
+                image_path = os.path.join(self.log_path, 'episode_{}_step_{}_{}_front_bb.png'.format(episode_idx, self._current_step, time_stamp))
                 # if self.target_only:
                 # draw_target_box(img, self.env.last_event.instance_detections2D, self.episode_data["targetObjectIds"], image_path)
                 # else:
-                draw_boxes(img, self.env.last_event.instance_detections2D, image_path)
+                draw_boxes(img,self.env.last_event.instance_detections2D, image_path)
                 # img.save(image_path)
                 return image_path
 
     def save_episode_log_per_step(self, flag):
 
-        episode_idx = (
-            self._current_episode_num
-            if not len(self.selected_indexes)
-            else self.selected_indexes[self._current_episode_num - 1] + 1
-        )
+        episode_idx = self._current_episode_num if not len(self.selected_indexes) else self.selected_indexes[self._current_episode_num - 1] + 1
 
         if not os.path.exists(self.log_path):
             os.makedirs(self.log_path)
         time_stamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
-        filename = "episode_{}.json".format(episode_idx)
+        filename = 'episode_{}.json'.format(episode_idx)
         if len(self.episode_log):
-            with open(os.path.join(self.log_path, filename), "a") as f:
+            with open(os.path.join(self.log_path, filename), 'a') as f:
                 if flag == 1:
-                    f.write("\n\n")
+                    f.write('\n\n')
                     for item in self.episode_log:
-                        if "object_states" in item:
-                            item.pop("object_states")
+                        if 'object_states' in item:
+                            item.pop('object_states')
                         try:
                             json.dump(item, f, ensure_ascii=False)
                         except:
-                            import pdb
-
-                            pdb.set_trace()
-                        f.write("\n")
+                            import pdb;pdb.set_trace()
+                        f.write('\n') 
                 else:
                     for item in self.episode_log:
-                        if "object_states" in item:
-                            item.pop("object_states")
+                        if 'object_states' in item:
+                            item.pop('object_states')
                         try:
                             json.dump(item, f, ensure_ascii=False)
                         except:
-                            import pdb
-
-                            pdb.set_trace()
-                        f.write("\n")
+                            import pdb;pdb.set_trace()
+                        f.write('\n') 
 
     # def save_episode_log(self):
     #     if not os.path.exists(self.log_path):
@@ -452,7 +439,7 @@ class EBNavigationEnv(gym.Env):
     #                     json.dump(item, f, ensure_ascii=False)
     #                 except:
     #                     import pdb;pdb.set_trace()
-    #                 f.write('\n')
+    #                 f.write('\n') 
 
     def close(self):
         """Close the environment."""
@@ -466,16 +453,16 @@ if __name__ == "__main__":
     print([(i, name) for i, name in enumerate(env.language_skill_set)])
     for _ in range(30):
         # Select  action
-        action = int(input("action id: "))  # env.action_space.sample()
+        action = int(input('action id: ')) #env.action_space.sample()
         if action in env.language_skill_set:
             action = env.language_skill_set.index(action)
         else:
             action = int(action)
             if action < 0:
                 break
-
+        
         print(env.language_skill_set[action])
-
+        
         # Execute action
         obs, reward, done, info = env.step(action, "", 1)
         print(reward, done, info)

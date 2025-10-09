@@ -1,6 +1,5 @@
 # this will force ai2thor to initialize and download the required assets
 from ai2thor.controller import Controller
-from ai2thor.platform import CloudRendering, Linux64
 import sys
 import json
 import time
@@ -17,12 +16,12 @@ try:
         snapToGrid=False,
         # image modalities
         renderDepthImage=False,
-        renderInstanceSegmentation=True,
+        # renderInstanceSegmentation=True,
         # camera properties
         width=1024,
         height=1024,
         fieldOfView=60,
-        platform=Linux64,  # Use CloudRendering for cloud environments
+        # Note: platform parameter not available in AI2Thor 2.1.0
     )
 
     # Perform a trivial action to ensure simulation steps work.
@@ -50,7 +49,3 @@ except Exception as e:
 finally:
     if controller is not None:
         controller.stop()
-        # Add small delay to ensure cleanup completes
-        import time
-        time.sleep(3)
-        print("AI2THOR controller stopped and cleaned up")

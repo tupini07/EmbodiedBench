@@ -1,0 +1,255 @@
+description: DEbug inference Help
+
+target:
+  service: sing
+  name: palisades24
+  # name: palisades26
+  # name: palisades27
+  # name: msrresrchbasicvc
+  # name: msrresrchlabbasic # <- this is the one that has a bunch of v100s
+  workspace_name: atupinirgws
+
+environment:
+  image: amlt-sing/acpt-torch2.7.1-py3.10-cuda12.6-ubuntu22.04
+
+  setup:
+    - set -ex
+    - echo "start" 
+    - sudo apt-get update
+    - sudo apt-get install -yq libc6-dev libgdiplus libx11-dev libxcursor-dev libxrandr-dev
+        libxi-dev libgl1-mesa-dev libglu1-mesa-dev ca-certificates curl
+    - sudo apt-get install -yq libxss1 libgconf-2-4 libxtst6 libxrandr2 libasound2 libpangocairo-1.0-0
+        libatk1.0-0 libgtk-3-0 libgdk-pixbuf2.0-0 xvfb vulkan-tools xvfb mesa-utils pciutils
+    - sudo apt-get install -yq mono-runtime mono-complete
+    - conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
+    - conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+    - conda create -n glm-vllm python==3.12 -y
+
+storage:
+  magmathor:
+    storage_account_name: magmardata
+    container_name: magmathor
+  magmar_public:
+    storage_account_name: magmardata
+    container_name: public
+  vlp_datasets:
+    storage_account_name: vlpdatasets
+    container_name: data
+  reuben_models:
+    storage_account_name: reubenprojects
+    container_name: model
+  atupinirgsa_data:
+    storage_account_name: atupinirgsa
+    container_name: data
+
+# data:
+#   local_dir: ../data/output/1__openai_extracted_entities
+#   remote_dir: magmar_data/1__openai_extracted_entities
+#   storage_id: atupinirgsa_data
+
+code:
+  local_dir: .
+  ignore:
+    - .venv/
+
+search:
+  job_template:
+    name: eval-{model_config}
+    sku: 1x 40G1-A100
+    priority: high
+    mpi: False
+    sla_tier: Premium
+    process_count_per_node: 1
+    identity: managed
+    command:
+      - set -ex
+
+      - MODEL_NAME=$$(awk -F'::' '{{print $$1}}' <<< "{model_config}")
+      - MODEL_PATH=$$(awk -F'::' '{{print $$2}}' <<< "{model_config}")
+      - MODEL_CHECKPOINT="/mnt/$$MODEL_PATH"
+
+      # MODEL_NAME="Qwen2.5-VL-7B-Instruct_SFT_C"
+      # MODEL_CHECKPOINT="/mnt/magmathor/training/checkpoints/Qwen2.5-VL-7B-Instruct__sft__llamafactory_ai2thor_correct-only_tag_bs1_accum1_lr1e-5_cosine_0.1_ft_llm_qwen_base_pix_25088_50176_model_multinode/checkpoint-2100/"
+
+      - CUR_DIR=$$PWD
+
+      - cd /tmp/
+
+      - curl -LsSf https://astral.sh/uv/install.sh | sh
+      - source $$HOME/.local/bin/env
+
+      - mkdir -p /tmp/vllm-server
+      - cd /tmp/vllm-server
+      - uv venv --python=3.12 --clear
+      - source .venv/bin/activate
+
+      - uv pip install "vllm[video]==0.10.2" --torch-backend=auto
+      - uv pip install flashinfer-python==0.3.1 bitsandbytes==0.47.0
+
+      - export CUDA_VISIBLE_DEVICES=0,1,2,3
+      - | 
+        vllm serve "$$MODEL_CHECKPOINT"  \
+           --tensor-parallel-size 1  \
+           --uvicorn-log-level critical  \
+           --allowed-local-media-path /  \
+           --mm-encoder-tp-mode data \
+           --served-model-name "vllm-model" \
+           > vllm_server.log 2>&1 &
+
+      # curl -o- http://localhost:30080/models
+      # wait for server to be ready
+      - sleep 15  # wait for basic server to start
+      - while ! curl -s http://localhost:8000/v1/models | grep "max_model_len"; do echo "Waiting for vllm server..."; sleep 5; done
+
+      - deactivate
+
+      - eval "$$(conda shell.bash hook)"
+
+      - mkdir /tmp/embodiedbench
+      - cd /tmp/embodiedbench
+      - git clone https://github.com/EmbodiedBench/EmbodiedBench.git
+      - cd EmbodiedBench
+
+      - bash install.sh
+
+      - conda activate embench
+      - python -m embodiedbench.envs.eb_alfred.scripts.startx 1 > /dev/null 2>&1 &
+
+      # EB-Alfred
+      - conda activate embench
+      - pip install -r embodiedbench/envs/eb_alfred/requirements.txt
+      - git clone https://huggingface.co/datasets/EmbodiedBench/EB-ALFRED
+      - mv EB-ALFRED embodiedbench/envs/eb_alfred/data/json_2.1.0
+
+      # to test if EBAlfEnv works
+      - python -m embodiedbench.envs.eb_alfred.EBAlfEnv
+
+      # to test if EBHabitatEnv works
+      - python -m embodiedbench.envs.eb_habitat.EBHabEnv
+
+      # EB-Navigation (just test if it works)
+      - conda activate embench_nav
+      - python -m embodiedbench.envs.eb_navigation.EBNavEnv
+
+      # run experiments
+      - export remote_url=http://localhost:8000/v1/chat/completions
+      - export server_url=http://localhost:8000/v1/chat/completions
+
+
+      - conda activate embench
+      - python -m embodiedbench.main env=eb-alf model_name="vllm-model" exp_name='baseline'
+
+      - python -m embodiedbench.main env=eb-alf model_name=gpt-4o-mini exp_name='baseline'
+      - python -m embodiedbench.main env=eb-hab model_name=gpt-4o-mini exp_name='baseline'
+
+      - conda activate embench_nav
+      - python -m embodiedbench.main env=eb-nav model_name=gpt-4o exp_name='baseline'
+
+      - conda activate embench_man
+      - python -m embodiedbench.main env=eb-man model_name=claude-3-5-sonnet-20241022 exp_name='baseline'
+
+
+
+
+
+
+
+
+
+
+      - cd $$CUR_DIR
+      - conda env create -f conda_envs/environment.yaml
+      - conda activate embench
+      - pip install -e .
+
+      - git clone https://huggingface.co/datasets/EmbodiedBench/EB-ALFRED
+      - mv EB-ALFRED embodiedbench/envs/eb_alfred/data/json_2.1.0
+      - pip install azure-identity==1.25.1 azure-core==1.35.1
+      - pip install ai2thor==4.0.0
+
+      - sudo mkdir -p /tmp/.X11-unix
+      - sudo chmod 1777 /tmp/.X11-unix
+      
+      # - xvfb "$$DISPLAY" -screen 0 1024x1024x24 -ac +extension GLX +render -noreset &
+      # - python embodiedbench/force_ai2thor_initialization.py
+      - xvfb-run -n 90 -s "-screen 0 1024x1024x24 -ac +extension GLX +render -noreset" bash -c "python embodiedbench/force_ai2thor_initialization.py"
+
+      - export remote_url=http://localhost:8000/v1/chat/completions
+      - export server_url=http://localhost:8000/v1/chat/completions
+
+      # disable CUDA for AI2THOR to avoid Vulkan/CUDA device mismatch (also, vllm is using the GPUs)
+      - export CUDA_VISIBLE_DEVICES=''
+
+      # - xvfb-run -n 1 -s "-screen 0 1024x1024x24 -ac +extension GLX +render -noreset" bash -c "python -m embodiedbench.main env=eb-alf model_name=$MODEL_NAME model_type='custom' exp_name='5-VL-7B-Instruct_SFT_C::magmathor/training/checkpoints/Qwen2.5-VL-7B-Instruct__sft__llamafactory_ai2thor_correct-only_tag_bs1_accum1_lr1e-5_cosine_0.1_ft_llm_qwen_base_pix_25088_50176_model_multinode/checkpoint-2100/'"
+
+      - xvfb-run -n 1 -s "-screen 0 1024x1024x24 -ac +extension GLX +render -noreset" bash -c "python -m embodiedbench.main env=eb-alf model_name=$$MODEL_NAME model_type='custom' exp_name='{model_config}'"
+
+
+
+
+      - uv sync
+      - source .venv/bin/activate
+
+      - export EMBODIED_BENCH_ROOT=$$(pwd)
+      - uv pip install -e .
+      # - curl -sSL https://raw.githubusercontent.com/Strong-Foundation/git-lfs-setup/1e5d743b5d0e5916be91188d37e8b08f33a78755/git-lfs-setup.sh | sudo bash
+      # - git lfs install 
+
+
+      - cd /tmp
+      - git clone https://github.com/EmbodiedBench/EmbodiedBench.git
+      - cd EmbodiedBench
+
+      - conda env create -f conda_envs/environment.yaml --name embench -y
+
+      - |
+        if git rev-parse --git-dir > /dev/null 2>&1; then
+            echo "Git repository detected, pulling LFS files..."
+            git lfs pull
+        else
+            echo "Not in a Git repository, skipping git lfs pull"
+        fi
+
+
+      # - |
+      #   uv run glm_vllm_video_infer__openai_server_comp.py \
+      #     --model "vllm-model" \
+      #     --input_jsonl "/mnt/magmar_public/vision_tasks_eval_collection/videor1_train_videos_only.jsonl" \
+      #     --output_path "/mnt/atupinirgsa_data/glm_classifications/videor1/videor1_train_videos_only.eval.fidx{fidx}-32-nf{num_frames}-q{with_quantization}-nr{num_rollouts}.GLM-4.5V.jsonl" \
+      #     --images_root_dir "/mnt/vlp_datasets" \
+      #     --max_tokens 2048 \
+      #     --temperature 0.8 \
+      #     --num_rollouts {num_rollouts} \
+      #     --fidx "{fidx}-32" 
+
+
+      # # https://reubenprojects.blob.core.windows.net/model/projects/reubenprojects/pretrained_weights/GLM-4.5V/
+      # # https://reubenprojects.blob.core.windows.net/model/projects/reubenprojects/pretrained_weights/GLM-4.1V-9B-Thinking/
+      # # https://reubenprojects.blob.core.windows.net/model/projects/reubenprojects/pretrained_weights/GLM-4.5V-FP8/ 
+
+      # - CHECKPOINT_PATH="/mnt/reuben_models/projects/reubenprojects/pretrained_weights/GLM-4.1V-9B-Thinking"
+      # - CHECKPOINT_PATH="/mnt/reuben_models/projects/reubenprojects/pretrained_weights/GLM-4.5V"
+      # - CHECKPOINT_PATH="/mnt/reuben_models/projects/reubenprojects/pretrained_weights/GLM-4.5V-FP8"
+
+    submit_args:
+      container_args:
+        shm_size: 256g
+        ipc: host
+      env:
+        NCCL_IB_DISABLE: 0
+        NCCL_DEBUG: INFO
+        NCCL_IB_TIMEOUT: 60
+        MKL_THREADING_LAYER: GNU
+        # # Additional NCCL settings for multi-node training
+        # NCCL_SOCKET_IFNAME: eth0
+        # NCCL_TREE_THRESHOLD: 0
+        # NCCL_NET_GDR_rLEVEL: 2
+        _AZUREML_SINGULARITY_JOB_UAI: /subscriptions/2cd190bb-b42a-477c-b1bb-2f20932d8dc5/resourceGroups/atupinirg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/atupinirgid
+    tags: []
+  max_trials: 1000
+  type: grid
+  params:
+    - name: model_config
+      spec: discrete
+      values:
+        - Qwen2.5-VL-7B-Instruct_SFT_C::magmathor/training/checkpoints/Qwen2.5-VL-7B-Instruct__sft__llamafactory_ai2thor_correct-only_tag_bs1_accum1_lr1e-5_cosine_0.1_ft_llm_qwen_base_pix_25088_50176_model_multinode/checkpoint-2100/

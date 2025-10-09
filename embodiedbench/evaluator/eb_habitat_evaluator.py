@@ -67,8 +67,7 @@ class EB_HabitatEvaluator():
             model_type = self.config.get('model_type', 'remote')
             self.planner = VLMPlanner(self.model_name, model_type, self.env.language_skill_set, self.system_prompt, examples, n_shot=self.config['n_shots'], obs_key='head_rgb',
                                                  chat_history=self.config['chat_history'], language_only=self.config['language_only'], 
-                                                 use_feedback=self.config.get('env_feedback', True), multistep=self.config.get('multistep', 0), tp=self.config.get('tp', 1),
-                                                 temperature=self.config.get('temperature', 0.0))
+                                                 use_feedback=self.config.get('env_feedback', True), multistep=self.config.get('multistep', 0), tp=self.config.get('tp', 1))
 
             self.evaluate()
             average_json_values(os.path.join(self.env.log_path, 'results'), output_file='summary.json')

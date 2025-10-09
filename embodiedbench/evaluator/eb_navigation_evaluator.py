@@ -61,8 +61,7 @@ class EB_NavigationEvaluator():
                                            examples = examples, n_shot=self.config['n_shots'], obs_key='head_rgb', 
                                            chat_history=self.config['chat_history'], language_only=self.config['language_only'], 
                                            multiview=self.config['multiview'], multistep = self.config['multistep'], 
-                                           visual_icl = self.config['visual_icl'], truncate=self.config.get('truncate', False),
-                                           temperature=self.config.get('temperature', 0.0))
+                                           visual_icl = self.config['visual_icl'], truncate=self.config.get('truncate', False))
             
             self.evaluate()
             average_json_values(os.path.join(self.env.log_path, 'results'), selected_key = None)

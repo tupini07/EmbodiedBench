@@ -23,7 +23,7 @@ VISUAL_ICL_EXAMPLE_CATEGORY = {
 }
 
 class ManipPlanner():
-    def __init__(self, model_name, model_type, system_prompt, examples, n_shot=0, obs_key='front_rgb', chat_history=False, language_only=False, multiview=False, multistep=False, visual_icl=False, tp=1, temperature=0.0, kwargs={}):
+    def __init__(self, model_name, model_type, system_prompt, examples, n_shot=0, obs_key='front_rgb', chat_history=False, language_only=False, multiview=False, multistep=False, visual_icl=False, tp=1, kwargs={}):
         self.model_name = model_name
         self.model_type = model_type
         self.obs_key = obs_key
@@ -34,7 +34,7 @@ class ManipPlanner():
         if model_type == 'custom':
             self.model = CustomModel(model_name, language_only)
         else:
-            self.model = RemoteModel(model_name, model_type, language_only, tp=tp, task_type='manip', temperature=temperature)
+            self.model = RemoteModel(model_name, model_type, language_only, tp=tp, task_type='manip')
 
         self.planner_steps = 0
         self.output_json_error = 0

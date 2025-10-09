@@ -98,30 +98,18 @@ class EBAlfEnv(gym.Env):
         """
         Initialize the AI2THOR environment.
         """
-        import sys
         super().__init__()
         self.data_path = ALFRED_SPLIT_PATH
         self.reward_config_path = ALFRED_REWARD_PATH
         self.resolution = resolution
-        logger.info(f"Creating ThorConnector with X_DISPLAY={X_DISPLAY}, resolution={resolution}...")
-        print(f"DEBUG: About to create ThorConnector with x_display={X_DISPLAY}, resolution={resolution}", flush=True)
-        sys.stdout.flush()
         self.env = ThorConnector(x_display=X_DISPLAY, player_screen_height=resolution, player_screen_width=resolution)
-        print(f"DEBUG: ThorConnector creation completed successfully", flush=True)
-        sys.stdout.flush()
-        logger.info("ThorConnector created successfully")
 
         # load dataset
         assert eval_set in ValidEvalSets
         self.down_sample_ratio = down_sample_ratio
-        logger.info(f"Loading dataset for eval_set={eval_set} from {self.data_path}...")
-        if not os.path.exists(self.data_path):
-            raise FileNotFoundError(f"Dataset split file not found: {self.data_path}")
         self.dataset = self._load_dataset(eval_set)
-        logger.info(f"Loaded {len(self.dataset)} episodes from dataset")
         if len(selected_indexes):
             self.dataset = [self.dataset[i] for i in selected_indexes]
-            logger.info(f"Filtered to {len(self.dataset)} episodes using selected_indexes")
         
         # Episode tracking
         self.number_of_episodes = len(self.dataset)

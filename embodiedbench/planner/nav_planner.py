@@ -22,7 +22,7 @@ template_lang = template_lang
 MESSAGE_WINDOW_LEN = 5
 
 class EBNavigationPlanner():
-    def __init__(self, model_name = '', model_type = 'remote', actions = [], system_prompt = '', examples = '', n_shot=1, obs_key='head_rgb', chat_history=False, language_only=False, multiview = False, multistep = False, visual_icl = False, tp=1, truncate=False, temperature=0.0, kwargs={}):
+    def __init__(self, model_name = '', model_type = 'remote', actions = [], system_prompt = '', examples = '', n_shot=1, obs_key='head_rgb', chat_history=False, language_only=False, multiview = False, multistep = False, visual_icl = False, tp=1, truncate=False, kwargs={}):
         self.model_name = model_name
         self.model_type = model_type
         self.obs_key = obs_key
@@ -73,7 +73,7 @@ You are supposed to output in JSON.{template_lang if self.language_only else tem
         if model_type == 'custom':
             self.model = CustomModel(model_name, language_only)
         else:
-            self.model = RemoteModel(model_name, model_type, language_only, tp=tp, temperature=temperature)
+            self.model = RemoteModel(model_name, model_type, language_only, tp=tp)
 
     
     def set_actions(self, actions):

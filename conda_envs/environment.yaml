@@ -153,7 +153,7 @@ dependencies:
   - pip:
       - accelerate==1.1.1
       - addict==2.4.0
-      - ai2thor==4.0.0 #2.1.0 Upgrade to support platform Linux64
+      - ai2thor==2.1.0
       - aiohappyeyeballs==2.4.4
       - aiohttp==3.11.9
       - aiosignal==1.3.1
@@ -213,7 +213,7 @@ dependencies:
       - httpcore==1.0.7
       - httplib2==0.22.0
       - httpx==0.27.0
-      - huggingface-hub>=0.30.0,<1.0 #==0.26.3
+      - huggingface-hub==0.26.3
       - hydra-core==1.3.2
       - idna==3.10
       - importlib-metadata==8.5.0
@@ -290,7 +290,7 @@ dependencies:
       - psutil==6.1.0
       - ptyprocess==0.7.0
       - pure-eval==0.2.3
-#     - pyairports==2.1.1
+      - pyairports==2.1.1
       - pyarrow==18.1.0
       - pyasn1==0.6.1
       - pyasn1-modules==0.4.1
