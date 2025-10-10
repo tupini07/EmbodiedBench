@@ -105,21 +105,14 @@ search:
 
       - eval "$$(conda shell.bash hook)"
 
-      - mkdir /tmp/embodiedbench
-      - cd /tmp/embodiedbench
-      - git clone https://github.com/EmbodiedBench/EmbodiedBench.git
-      - cd EmbodiedBench
-
       - bash install.sh
+      - bash patches/apply_patches.sh
+
+      - sudo apt install -yq pciutils
+      - sleep 5
 
       - conda activate embench
       - python -m embodiedbench.envs.eb_alfred.scripts.startx 1 > /dev/null 2>&1 &
-
-      # EB-Alfred
-      - conda activate embench
-      - pip install -r embodiedbench/envs/eb_alfred/requirements.txt
-      - git clone https://huggingface.co/datasets/EmbodiedBench/EB-ALFRED
-      - mv EB-ALFRED embodiedbench/envs/eb_alfred/data/json_2.1.0
 
       # to test if EBAlfEnv works
       - python -m embodiedbench.envs.eb_alfred.EBAlfEnv

@@ -23,7 +23,14 @@ class ThorConnector(ThorEnv):
                  quality='MediumCloseFitShadows',
                  build_path=constants.BUILD_PATH):
         super().__init__(x_display, player_screen_height, player_screen_width, quality, build_path)
-        self.font = ImageFont.truetype("/usr/share/fonts/truetype/ubuntu/UbuntuMono-B.ttf", 24)
+        # Try to load a font, fallback to default if not available
+        try:
+            self.font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", 24)
+        except:
+            try:
+                self.font = ImageFont.truetype("/usr/share/fonts/truetype/ubuntu/UbuntuMono-B.ttf", 24)
+            except:
+                self.font = ImageFont.load_default()
         self.agent_height = 0.9
         self.cur_receptacle = None
         self.reachable_positions, self.reachable_position_kdtree = None, None
