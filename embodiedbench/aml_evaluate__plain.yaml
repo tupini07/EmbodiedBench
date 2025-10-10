@@ -112,117 +112,40 @@ search:
       - sleep 5
 
       - conda activate embench
+      - export DISPLAY=":1"
+
       - python -m embodiedbench.envs.eb_alfred.scripts.startx 1 > /dev/null 2>&1 &
 
       # to test if EBAlfEnv works
-      - python -m embodiedbench.envs.eb_alfred.EBAlfEnv
+      # - python -m embodiedbench.envs.eb_alfred.EBAlfEnv
 
       # to test if EBHabitatEnv works
-      - python -m embodiedbench.envs.eb_habitat.EBHabEnv
+      # >> missing `magnum` package??
+      # - python -m embodiedbench.envs.eb_habitat.EBHabEnv
 
       # EB-Navigation (just test if it works)
-      - conda activate embench_nav
-      - python -m embodiedbench.envs.eb_navigation.EBNavEnv
+      # >> using another version I think
+      # - conda activate embench_nav
+      # - python -m embodiedbench.envs.eb_navigation.EBNavEnv
 
       # run experiments
-      - export remote_url=http://localhost:8000/v1/chat/completions
-      - export server_url=http://localhost:8000/v1/chat/completions
-
+      - export OPENAI_API_KEY="empty"
+      - export remote_url=http://localhost:8000/v1/
+      - export server_url=http://localhost:8000/v1/
 
       - conda activate embench
+      
+      # for debugging
+      # - python -m embodiedbench.main env=eb-alf model_name="vllm-model" exp_name='baseline' down_sample_ratio=0.1
+      
       - python -m embodiedbench.main env=eb-alf model_name="vllm-model" exp_name='baseline'
-
-      - python -m embodiedbench.main env=eb-alf model_name=gpt-4o-mini exp_name='baseline'
-      - python -m embodiedbench.main env=eb-hab model_name=gpt-4o-mini exp_name='baseline'
+      - python -m embodiedbench.main env=eb-hab model_name="vllm-model" exp_name='baseline'
 
       - conda activate embench_nav
-      - python -m embodiedbench.main env=eb-nav model_name=gpt-4o exp_name='baseline'
+      - python -m embodiedbench.main env=eb-nav model_name="vllm-model" exp_name='baseline'
 
       - conda activate embench_man
-      - python -m embodiedbench.main env=eb-man model_name=claude-3-5-sonnet-20241022 exp_name='baseline'
-
-
-
-
-
-
-
-
-
-
-      - cd $$CUR_DIR
-      - conda env create -f conda_envs/environment.yaml
-      - conda activate embench
-      - pip install -e .
-
-      - git clone https://huggingface.co/datasets/EmbodiedBench/EB-ALFRED
-      - mv EB-ALFRED embodiedbench/envs/eb_alfred/data/json_2.1.0
-      - pip install azure-identity==1.25.1 azure-core==1.35.1
-      - pip install ai2thor==4.0.0
-
-      - sudo mkdir -p /tmp/.X11-unix
-      - sudo chmod 1777 /tmp/.X11-unix
-      
-      # - xvfb "$$DISPLAY" -screen 0 1024x1024x24 -ac +extension GLX +render -noreset &
-      # - python embodiedbench/force_ai2thor_initialization.py
-      - xvfb-run -n 90 -s "-screen 0 1024x1024x24 -ac +extension GLX +render -noreset" bash -c "python embodiedbench/force_ai2thor_initialization.py"
-
-      - export remote_url=http://localhost:8000/v1/chat/completions
-      - export server_url=http://localhost:8000/v1/chat/completions
-
-      # disable CUDA for AI2THOR to avoid Vulkan/CUDA device mismatch (also, vllm is using the GPUs)
-      - export CUDA_VISIBLE_DEVICES=''
-
-      # - xvfb-run -n 1 -s "-screen 0 1024x1024x24 -ac +extension GLX +render -noreset" bash -c "python -m embodiedbench.main env=eb-alf model_name=$MODEL_NAME model_type='custom' exp_name='5-VL-7B-Instruct_SFT_C::magmathor/training/checkpoints/Qwen2.5-VL-7B-Instruct__sft__llamafactory_ai2thor_correct-only_tag_bs1_accum1_lr1e-5_cosine_0.1_ft_llm_qwen_base_pix_25088_50176_model_multinode/checkpoint-2100/'"
-
-      - xvfb-run -n 1 -s "-screen 0 1024x1024x24 -ac +extension GLX +render -noreset" bash -c "python -m embodiedbench.main env=eb-alf model_name=$$MODEL_NAME model_type='custom' exp_name='{model_config}'"
-
-
-
-
-      - uv sync
-      - source .venv/bin/activate
-
-      - export EMBODIED_BENCH_ROOT=$$(pwd)
-      - uv pip install -e .
-      # - curl -sSL https://raw.githubusercontent.com/Strong-Foundation/git-lfs-setup/1e5d743b5d0e5916be91188d37e8b08f33a78755/git-lfs-setup.sh | sudo bash
-      # - git lfs install 
-
-
-      - cd /tmp
-      - git clone https://github.com/EmbodiedBench/EmbodiedBench.git
-      - cd EmbodiedBench
-
-      - conda env create -f conda_envs/environment.yaml --name embench -y
-
-      - |
-        if git rev-parse --git-dir > /dev/null 2>&1; then
-            echo "Git repository detected, pulling LFS files..."
-            git lfs pull
-        else
-            echo "Not in a Git repository, skipping git lfs pull"
-        fi
-
-
-      # - |
-      #   uv run glm_vllm_video_infer__openai_server_comp.py \
-      #     --model "vllm-model" \
-      #     --input_jsonl "/mnt/magmar_public/vision_tasks_eval_collection/videor1_train_videos_only.jsonl" \
-      #     --output_path "/mnt/atupinirgsa_data/glm_classifications/videor1/videor1_train_videos_only.eval.fidx{fidx}-32-nf{num_frames}-q{with_quantization}-nr{num_rollouts}.GLM-4.5V.jsonl" \
-      #     --images_root_dir "/mnt/vlp_datasets" \
-      #     --max_tokens 2048 \
-      #     --temperature 0.8 \
-      #     --num_rollouts {num_rollouts} \
-      #     --fidx "{fidx}-32" 
-
-
-      # # https://reubenprojects.blob.core.windows.net/model/projects/reubenprojects/pretrained_weights/GLM-4.5V/
-      # # https://reubenprojects.blob.core.windows.net/model/projects/reubenprojects/pretrained_weights/GLM-4.1V-9B-Thinking/
-      # # https://reubenprojects.blob.core.windows.net/model/projects/reubenprojects/pretrained_weights/GLM-4.5V-FP8/ 
-
-      # - CHECKPOINT_PATH="/mnt/reuben_models/projects/reubenprojects/pretrained_weights/GLM-4.1V-9B-Thinking"
-      # - CHECKPOINT_PATH="/mnt/reuben_models/projects/reubenprojects/pretrained_weights/GLM-4.5V"
-      # - CHECKPOINT_PATH="/mnt/reuben_models/projects/reubenprojects/pretrained_weights/GLM-4.5V-FP8"
+      - python -m embodiedbench.main env=eb-man model_name="vllm-model" exp_name='baseline'
 
     submit_args:
       container_args:
