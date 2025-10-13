@@ -68,40 +68,42 @@ def startx(display):
     if platform.system() != 'Linux':
         raise Exception("Can only run startx on linux")
 
-    devices = []
-    for r in pci_records():
-        if r.get('Vendor', '') == 'NVIDIA Corporation' \
-                and r['Class'] in ['VGA compatible controller', '3D controller']:
-            bus_id = 'PCI:' + ':'.join(map(lambda x: str(int(x, 16)), re.split(r'[:\.]', r['Slot'])))
-            devices.append(bus_id)
-
-    if not devices:
-        raise Exception("no nvidia cards found")
+    # Try Xvfb first (for headless servers), fall back to Xorg
+    xvfb_path = subprocess.run(['which', 'Xvfb'], capture_output=True, text=True).stdout.strip()
+    xorg_path = subprocess.run(['which', 'Xorg'], capture_output=True, text=True).stdout.strip()
     
-
-    try:
-        fd, path = tempfile.mkstemp(dir='')
-        path = path.split('/')[-1]
-        with open(path, "w") as f:
-            f.write(generate_xorg_conf(devices))
-        
-        # Try Xvfb first (for headless servers), fall back to Xorg
-        xvfb_path = subprocess.run(['which', 'Xvfb'], capture_output=True, text=True).stdout.strip()
-        xorg_path = subprocess.run(['which', 'Xorg'], capture_output=True, text=True).stdout.strip()
-        
-        if xvfb_path:
-            # Use Xvfb for headless operation
-            command = shlex.split("Xvfb -screen 0 1024x768x24 :%s" % display)
-        elif xorg_path:
-            # Use Xorg if available
-            command = shlex.split("Xorg -noreset +extension GLX +extension RANDR +extension RENDER -config %s :%s" % (path, display))
-        else:
-            raise Exception("Neither Xvfb nor Xorg found. Please install one of them.")
-        
+    if xvfb_path:
+        # Use Xvfb for headless operation (no GPU required)
+        command = shlex.split("Xvfb -screen 0 1024x768x24 :%s" % display)
         subprocess.call(command)
-    finally:
-        os.close(fd)
-        os.unlink(path)
+    elif xorg_path:
+        # Use Xorg with minimal configuration
+        devices = []
+        for r in pci_records():
+            if r.get('Vendor', '') == 'NVIDIA Corporation' \
+                    and r['Class'] in ['VGA compatible controller', '3D controller']:
+                bus_id = 'PCI:' + ':'.join(map(lambda x: str(int(x, 16)), re.split(r'[:\.]', r['Slot'])))
+                devices.append(bus_id)
+
+        if devices:
+            # NVIDIA cards found, use custom config
+            fd, path = tempfile.mkstemp(dir='')
+            try:
+                path = path.split('/')[-1]
+                with open(path, "w") as f:
+                    f.write(generate_xorg_conf(devices))
+                
+                command = shlex.split("Xorg -noreset +extension GLX +extension RANDR +extension RENDER -config %s :%s" % (path, display))
+                subprocess.call(command)
+            finally:
+                os.close(fd)
+                os.unlink(path)
+        else:
+            # No NVIDIA cards, use default Xorg
+            command = shlex.split("Xorg -noreset +extension GLX +extension RANDR +extension RENDER :%s" % display)
+            subprocess.call(command)
+    else:
+        raise Exception("Neither Xvfb nor Xorg found. Please install one of them.")
 
 
 if __name__ == '__main__':

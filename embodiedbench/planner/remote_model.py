@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+from pathlib import Path
 import sys
 
 import anthropic
@@ -90,7 +91,8 @@ class RemoteModel:
                 )
             elif "vllm" in self.model_name:  # vLLM server with OpenAI-compatible API
                 self.model = OpenAI(
-                    base_url=remote_url or "http://localhost:8000/v1",
+                    base_url=remote_url
+                    or os.getenv("REMOTE_URL", "http://localhost:8000/v1"),
                     api_key="EMPTY",  # vLLM doesn't require an API key
                 )
             else:
@@ -477,6 +479,43 @@ class RemoteModel:
 
     def _call_vllm(self, message_history: list):
         """Call vLLM server with OpenAI-compatible API"""
+
+        # Debug: Save images and message history
+        debug_dir = Path.cwd() / "debug_messages"
+        os.makedirs(debug_dir, exist_ok=True)
+        
+        # Count how many images we're sending
+        image_count = 0
+        for msg in message_history:
+            if isinstance(msg.get("content"), list):
+                for item in msg["content"]:
+                    if item.get("type") == "image_url":
+                        image_url = item["image_url"]["url"]
+                        # Save the base64 image to disk
+                        if image_url.startswith("data:image"):
+                            # Extract base64 data
+                            base64_data = image_url.split(",", 1)[1]
+                            image_bytes = base64.b64decode(base64_data)
+                            image_path = os.path.join(debug_dir, f"image_{image_count}.png")
+                            with open(image_path, "wb") as f:
+                                f.write(image_bytes)
+                            print(f"DEBUG: Saved image to {image_path}")
+                            image_count += 1
+        
+        # Save the full message history (text only, not images)
+        messages_text_only = []
+        for msg in message_history:
+            if isinstance(msg.get("content"), list):
+                text_parts = [item["text"] for item in msg["content"] if item.get("type") == "text"]
+                messages_text_only.append({"role": msg["role"], "content": text_parts})
+            else:
+                messages_text_only.append(msg)
+        
+        with open(os.path.join(debug_dir, "message_history.json"), "w") as f:
+            json.dump(messages_text_only, f, indent=2)
+        print(f"DEBUG: Saved message history to {debug_dir}/message_history.json")
+        print(f"DEBUG: Total images sent: {image_count}")
+
 
         if not self.language_only:
             message_history = convert_format_2gemini(message_history)

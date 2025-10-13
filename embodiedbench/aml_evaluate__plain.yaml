@@ -51,11 +51,13 @@ code:
   local_dir: .
   ignore:
     - .venv/
+    - embodiedbench/envs/eb_manipulation/data/
+    - docs/pdf/embodiedbench.pdf
 
 search:
   job_template:
-    name: eval-{model_config}
-    sku: 1x 40G1-A100
+    name: EmbodiedBench-eval-{model_config}
+    sku: 1x 40G2-A100
     priority: high
     mpi: False
     sla_tier: Premium
@@ -63,13 +65,27 @@ search:
     identity: managed
     command:
       - set -ex
+      - export HF_TOKEN="$HF_TOKEN"
 
       - MODEL_NAME=$$(awk -F'::' '{{print $$1}}' <<< "{model_config}")
       - MODEL_PATH=$$(awk -F'::' '{{print $$2}}' <<< "{model_config}")
-      - MODEL_CHECKPOINT="/mnt/$$MODEL_PATH"
-
+      
       # MODEL_NAME="Qwen2.5-VL-7B-Instruct_SFT_C"
       # MODEL_CHECKPOINT="/mnt/magmathor/training/checkpoints/Qwen2.5-VL-7B-Instruct__sft__llamafactory_ai2thor_correct-only_tag_bs1_accum1_lr1e-5_cosine_0.1_ft_llm_qwen_base_pix_25088_50176_model_multinode/checkpoint-2100/"
+
+      # MODEL_NAME="Qwen2.5-VL-7B-Instruct"
+      # MODEL_CHECKPOINT="Qwen/Qwen2.5-VL-7B-Instruct"
+
+      # if modelname is qwen then don't load from disk but from huggingface
+      - |
+        if [ "$$MODEL_NAME" = "Qwen2.5-VL-7B-Instruct" ]; then
+          echo "Loading model from Huggingface"
+          MODEL_CHECKPOINT="$$MODEL_PATH"
+        else
+          echo "Loading model from disk"
+          MODEL_CHECKPOINT="/mnt/$$MODEL_PATH"
+        fi
+
 
       - CUR_DIR=$$PWD
 
@@ -86,22 +102,44 @@ search:
       - uv pip install "vllm[video]==0.10.2" --torch-backend=auto
       - uv pip install flashinfer-python==0.3.1 bitsandbytes==0.47.0
 
-      - export CUDA_VISIBLE_DEVICES=0,1,2,3
+      - export CUDA_VISIBLE_DEVICES=0,1
       - | 
         vllm serve "$$MODEL_CHECKPOINT"  \
            --tensor-parallel-size 1  \
            --uvicorn-log-level critical  \
            --allowed-local-media-path /  \
            --mm-encoder-tp-mode data \
-           --served-model-name "vllm-model" \
+           --port 43289  \
+           --served-model-name "vllm-model"  \
            > vllm_server.log 2>&1 &
 
+      - VLLM_PID=$$!
+      - echo "VLLM server PID -> $$VLLM_PID"
+
       # curl -o- http://localhost:30080/models
+
       # wait for server to be ready
       - sleep 15  # wait for basic server to start
-      - while ! curl -s http://localhost:8000/v1/models | grep "max_model_len"; do echo "Waiting for vllm server..."; sleep 5; done
+
+      # wait for vllm to start up AND that it hasn't crashed (or crash everything)
+      - |
+        while true; do
+          if ! ps -p $$VLLM_PID > /dev/null; then
+            echo "VLLM server has crashed. Exiting."
+            exit 1
+          fi
+          if curl -s http://localhost:43289/v1/models | grep -q "max_model_len"; then
+            echo "VLLM server is ready."
+            break
+          else
+            echo "Waiting for vllm server..."
+            sleep 5
+          fi
+        done
 
       - deactivate
+
+      - cd "$$CUR_DIR"
 
       - eval "$$(conda shell.bash hook)"
 
@@ -130,11 +168,16 @@ search:
 
       # run experiments
       - export OPENAI_API_KEY="empty"
-      - export remote_url=http://localhost:8000/v1/
-      - export server_url=http://localhost:8000/v1/
+      - export remote_url=http://localhost:43289/v1/
+      - export server_url=http://localhost:43289/v1/
 
       - conda activate embench
+      - pip install --upgrade 'ai2thor==2.4.22' 
+
+      - pip install --force-reinstall 'ai2thor==2.1.0' 
+      - conda run -n embench pip install 'numpy<1.24,>=1.20'
       
+
       # for debugging
       # - python -m embodiedbench.main env=eb-alf model_name="vllm-model" exp_name='baseline' down_sample_ratio=0.1
       
@@ -146,6 +189,8 @@ search:
 
       - conda activate embench_man
       - python -m embodiedbench.main env=eb-man model_name="vllm-model" exp_name='baseline'
+
+      - cp -r outputs "$${AMLT_DIRSYNC_DIR}/"
 
     submit_args:
       container_args:
@@ -168,4 +213,5 @@ search:
     - name: model_config
       spec: discrete
       values:
-        - Qwen2.5-VL-7B-Instruct_SFT_C::magmathor/training/checkpoints/Qwen2.5-VL-7B-Instruct__sft__llamafactory_ai2thor_correct-only_tag_bs1_accum1_lr1e-5_cosine_0.1_ft_llm_qwen_base_pix_25088_50176_model_multinode/checkpoint-2100/
+        - "Qwen2.5-VL-7B-Instruct::Qwen/Qwen2.5-VL-7B-Instruct"
+        # - Qwen2.5-VL-7B-Instruct_SFT_C::magmathor/training/checkpoints/Qwen2.5-VL-7B-Instruct__sft__llamafactory_ai2thor_correct-only_tag_bs1_accum1_lr1e-5_cosine_0.1_ft_llm_qwen_base_pix_25088_50176_model_multinode/checkpoint-2100/
