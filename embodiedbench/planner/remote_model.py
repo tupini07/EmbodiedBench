@@ -502,18 +502,30 @@ class RemoteModel:
                             print(f"DEBUG: Saved image to {image_path}")
                             image_count += 1
         
-        # Save the full message history (text only, not images)
-        messages_text_only = []
-        for msg in message_history:
-            if isinstance(msg.get("content"), list):
-                text_parts = [item["text"] for item in msg["content"] if item.get("type") == "text"]
-                messages_text_only.append({"role": msg["role"], "content": text_parts})
-            else:
-                messages_text_only.append(msg)
+        # Build a readable text representation of the conversation
+        conversation_text = "=" * 80 + "\n"
+        conversation_text += "CONVERSATION HISTORY\n"
+        conversation_text += "=" * 80 + "\n\n"
         
-        with open(os.path.join(debug_dir, "message_history.json"), "w") as f:
-            json.dump(messages_text_only, f, indent=2)
-        print(f"DEBUG: Saved message history to {debug_dir}/message_history.json")
+        for i, msg in enumerate(message_history, 1):
+            role = msg.get("role", "unknown").upper()
+            conversation_text += f"{'=' * 80}\n"
+            conversation_text += f"TURN {i}: {role}\n"
+            conversation_text += f"{'=' * 80}\n"
+            
+            content = msg.get("content", "")
+            if isinstance(content, list):
+                # Extract text parts and note images
+                for item in content:
+                    if item.get("type") == "text":
+                        conversation_text += item["text"] + "\n"
+                    elif item.get("type") == "image_url":
+                        conversation_text += "[IMAGE ATTACHED]\n"
+            else:
+                conversation_text += str(content) + "\n"
+            
+            conversation_text += "\n"
+        
         print(f"DEBUG: Total images sent: {image_count}")
 
 
@@ -560,9 +572,23 @@ class RemoteModel:
         )
 
         out = response.choices[0].message.content
+
+        out = fix_json(out)
+
+        # Add the model's response to the conversation text
+        conversation_text += f"{'=' * 80}\n"
+        conversation_text += f"MODEL RESPONSE\n"
+        conversation_text += f"{'=' * 80}\n"
+        conversation_text += out + "\n"
+        conversation_text += "\n" + "=" * 80 + "\n"
+        
+        # Save the full conversation to a text file
+        conversation_file = os.path.join(debug_dir, "conversation.txt")
+        with open(conversation_file, "w", encoding="utf-8") as f:
+            f.write(conversation_text)
+        print(f"DEBUG: Saved conversation to {conversation_file}")
+
         return out
-
-
 if __name__ == "__main__":
 
     model = RemoteModel(
