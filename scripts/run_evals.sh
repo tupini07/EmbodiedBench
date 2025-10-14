@@ -22,30 +22,47 @@ fi
 
 echo "Running evaluation with exp_name: $exp_name"
 
-source ~/miniconda3/etc/profile.d/conda.sh
+export CUDA_VISIBLE_DEVICES=0
+export DISPLAY=":1"
 
+python -m embodiedbench.envs.eb_alfred.scripts.startx 1 > /dev/null 2>&1 &
+sleep 2  
+
+dones_file="running/${exp_name}_dones.txt"
+
+source ~/miniconda3/etc/profile.d/conda.sh
 conda activate embench
 
-echo "Running EB-ALFRED evaluation..."
-python -m embodiedbench.main env=eb-alf model_name='vllm-model' exp_name="$exp_name" n_shots=$N_SHOTS
+# echo "Running EB-ALFRED evaluation..."
+# python -m embodiedbench.main env=eb-alf model_name='vllm-model' exp_name="$exp_name" n_shots=$N_SHOTS
+
+# echo "EB-ALFRED" >> "$dones_file"
 
 echo "Running EB-Habitat evaluation..."
 python -m embodiedbench.main env=eb-hab model_name="vllm-model" exp_name="$exp_name" n_shots=$N_SHOTS
 
-# -------------------------------------------------------------------
-
-conda activate embench_man
-
-echo "Running EB-Manipulation evaluation..."
-python -m embodiedbench.main env=eb-man model_name="vllm-model" exp_name="$exp_name" n_shots=$N_SHOTS
+echo "EB-Habitat" >> "$dones_file"
 
 # -------------------------------------------------------------------
 
-conda activate embench_nav
+# conda activate embench_man
 
-echo "Running EB-Navigation evaluation..."
-python -m embodiedbench.main env=eb-nav model_name="vllm-model" exp_name="$exp_name" n_shots=$N_SHOTS
+# echo "Running EB-Manipulation evaluation..."
+# python -m embodiedbench.main env=eb-man model_name="vllm-model" exp_name="$exp_name" n_shots=$N_SHOTS
 
-# -------------------------------------------------------------------
+# echo "EB-Manipulation" >> "$dones_file"
 
-echo "All evaluations completed."
+# # -------------------------------------------------------------------
+
+# conda activate embench_nav
+
+# echo "Running EB-Navigation evaluation..."
+# python -m embodiedbench.main env=eb-nav model_name="vllm-model" exp_name="$exp_name" n_shots=$N_SHOTS
+
+# echo "EB-Navigation" >> "$dones_file"
+
+# # -------------------------------------------------------------------
+
+# echo "All evaluations completed."
+
+# echo "ALL DONE" >> "$dones_file"

@@ -113,6 +113,13 @@ class EBHabEnv(gym.Env):
         """
         Initialize the HabitatRearrange environment.
         """
+        # Fix for EGL/CUDA device mapping issue on multi-GPU systems
+        # Unset CUDA_VISIBLE_DEVICES to allow EGL to properly enumerate GPU devices
+        # This resolves "unable to find CUDA device" errors with habitat-sim's EGL backend
+        # Reference: https://github.com/facebookresearch/habitat-sim/issues/2099
+        if 'CUDA_VISIBLE_DEVICES' in os.environ:
+            del os.environ['CUDA_VISIBLE_DEVICES']
+        
         # load config
         hydra.core.global_hydra.GlobalHydra.instance().clear()
         self.config = habitat.get_config(HABITAT_CONFIG_PATH)
