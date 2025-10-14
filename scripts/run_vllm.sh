@@ -9,7 +9,7 @@ MODEL_CHECKPOINT="Qwen/Qwen2.5-VL-7B-Instruct"
 # if modelname is qwen then don't load from disk but from huggingface
 if [ "$MODEL_NAME" = "Qwen2.5-VL-7B-Instruct" ]; then
     echo "Loading model from Huggingface"
-    MODEL_CHECKPOINT="$MODEL_PATH"
+    MODEL_CHECKPOINT="$MODEL_CHECKPOINT"
 else
     echo "Loading model from disk"
     MODEL_CHECKPOINT="/mnt/$MODEL_PATH"

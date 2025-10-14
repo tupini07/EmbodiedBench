@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python Debugger: Module",
+            "name": "embodiedbench.main env=eb-alf",
             "type": "debugpy",
             "request": "launch",
             "module": "embodiedbench.main",
@@ -15,7 +15,7 @@
                 "exp_name='baseline'",
             ],
             "env": {
-                "REMOTE_URL": "https://dtr80bqg-43289.euw.devtunnels.ms/v1",
+                "REMOTE_URL": "http://localhost:43289/v1",
                 "OPENAI_API_KEY": "empty",
             }
         }
