@@ -22,7 +22,6 @@ fi
 
 echo "Running evaluation with exp_name: $exp_name"
 
-export CUDA_VISIBLE_DEVICES=0
 export DISPLAY=":1"
 
 python -m embodiedbench.envs.eb_alfred.scripts.startx 1 > /dev/null 2>&1 &
@@ -45,12 +44,17 @@ echo "EB-Habitat" >> "$dones_file"
 
 # -------------------------------------------------------------------
 
-# conda activate embench_man
+conda activate embench_man
 
-# echo "Running EB-Manipulation evaluation..."
-# python -m embodiedbench.main env=eb-man model_name="vllm-model" exp_name="$exp_name" n_shots=$N_SHOTS
+# Set CoppeliaSim environment variables for PyRep
+export COPPELIASIM_ROOT="$(pwd)/CoppeliaSim_Pro_V4_1_0_Ubuntu20_04"
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$COPPELIASIM_ROOT
+export QT_QPA_PLATFORM_PLUGIN_PATH=$COPPELIASIM_ROOT
 
-# echo "EB-Manipulation" >> "$dones_file"
+echo "Running EB-Manipulation evaluation..."
+python -m embodiedbench.main env=eb-man model_name="vllm-model" exp_name="$exp_name" n_shots=$N_SHOTS
+
+echo "EB-Manipulation" >> "$dones_file"
 
 # # -------------------------------------------------------------------
 

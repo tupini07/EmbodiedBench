@@ -59,23 +59,64 @@ sudo modprobe nvidia nvidia_modeset nvidia_drm nvidia_uvm
 
 # Install EB-Manipulation
 conda activate embench_man
-cd embodiedbench/envs/eb_manipulation
-wget https://downloads.coppeliarobotics.com/V4_1_0/CoppeliaSim_Pro_V4_1_0_Ubuntu20_04.tar.xz
-tar -xf CoppeliaSim_Pro_V4_1_0_Ubuntu20_04.tar.xz
-rm CoppeliaSim_Pro_V4_1_0_Ubuntu20_04.tar.xz
-mv CoppeliaSim_Pro_V4_1_0_Ubuntu20_04/ $EMBODIED_BENCH_ROOT
+
+# Download and setup CoppeliaSim if not already present
+if [ ! -d "$EMBODIED_BENCH_ROOT/CoppeliaSim_Pro_V4_1_0_Ubuntu20_04" ]; then
+    echo "Downloading CoppeliaSim..."
+    cd embodiedbench/envs/eb_manipulation
+    wget https://downloads.coppeliarobotics.com/V4_1_0/CoppeliaSim_Pro_V4_1_0_Ubuntu20_04.tar.xz
+    tar -xf CoppeliaSim_Pro_V4_1_0_Ubuntu20_04.tar.xz
+    rm CoppeliaSim_Pro_V4_1_0_Ubuntu20_04.tar.xz
+    mv CoppeliaSim_Pro_V4_1_0_Ubuntu20_04/ $EMBODIED_BENCH_ROOT/
+    cd ../../..
+else
+    echo "CoppeliaSim already exists, skipping download..."
+fi
+
+# Set CoppeliaSim environment variables
 export COPPELIASIM_ROOT=$EMBODIED_BENCH_ROOT/CoppeliaSim_Pro_V4_1_0_Ubuntu20_04
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$COPPELIASIM_ROOT
 export QT_QPA_PLATFORM_PLUGIN_PATH=$COPPELIASIM_ROOT
-git clone https://github.com/stepjam/PyRep.git
+
+echo "CoppeliaSim environment variables:"
+echo "  COPPELIASIM_ROOT=$COPPELIASIM_ROOT"
+echo "  LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+echo "  QT_QPA_PLATFORM_PLUGIN_PATH=$QT_QPA_PLATFORM_PLUGIN_PATH"
+
+# Install PyRep
+if [ ! -d "PyRep" ]; then
+    echo "Cloning PyRep repository..."
+    git clone https://github.com/stepjam/PyRep.git
+else
+    echo "PyRep directory already exists, skipping clone..."
+fi
+
 cd PyRep
+echo "Installing PyRep in embench_man environment..."
 pip install -r requirements.txt
 pip install -e .
 cd ..
-pip install -r requirements.txt
-pip install -e .
-cp ./simAddOnScript_PyRep.lua $COPPELIASIM_ROOT
-git clone https://huggingface.co/datasets/EmbodiedBench/EB-Manipulation
-mv EB-Manipulation/data/ ./
-rm -rf EB-Manipulation/
+
+# Copy required Lua script to CoppeliaSim
+echo "Copying simAddOnScript_PyRep.lua to CoppeliaSim..."
+cp PyRep/pyrep/backend/simAddOnScript_PyRep.lua $COPPELIASIM_ROOT/
+
+# Download EB-Manipulation dataset
+cd embodiedbench/envs/eb_manipulation
+if [ ! -d "data" ]; then
+    echo "Downloading EB-Manipulation dataset..."
+    git clone https://huggingface.co/datasets/EmbodiedBench/EB-Manipulation
+    mv EB-Manipulation/data/ ./
+    rm -rf EB-Manipulation/
+else
+    echo "EB-Manipulation data already exists, skipping download..."
+fi
 cd ../../..
+
+# Add environment variables to shell config
+echo ""
+echo "IMPORTANT: Add these lines to your ~/.bashrc or ~/.zshrc:"
+echo "export COPPELIASIM_ROOT=$COPPELIASIM_ROOT"
+echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$COPPELIASIM_ROOT'
+echo 'export QT_QPA_PLATFORM_PLUGIN_PATH=$COPPELIASIM_ROOT'
+echo ""
