@@ -480,55 +480,6 @@ class RemoteModel:
     def _call_vllm(self, message_history: list):
         """Call vLLM server with OpenAI-compatible API"""
 
-        # Debug: Save images and message history
-        debug_dir = Path.cwd() / "debug_messages"
-        os.makedirs(debug_dir, exist_ok=True)
-        
-        # Count how many images we're sending
-        image_count = 0
-        for msg in message_history:
-            if isinstance(msg.get("content"), list):
-                for item in msg["content"]:
-                    if item.get("type") == "image_url":
-                        image_url = item["image_url"]["url"]
-                        # Save the base64 image to disk
-                        if image_url.startswith("data:image"):
-                            # Extract base64 data
-                            base64_data = image_url.split(",", 1)[1]
-                            image_bytes = base64.b64decode(base64_data)
-                            image_path = os.path.join(debug_dir, f"image_{image_count}.png")
-                            with open(image_path, "wb") as f:
-                                f.write(image_bytes)
-                            print(f"DEBUG: Saved image to {image_path}")
-                            image_count += 1
-        
-        # Build a readable text representation of the conversation
-        conversation_text = "=" * 80 + "\n"
-        conversation_text += "CONVERSATION HISTORY\n"
-        conversation_text += "=" * 80 + "\n\n"
-        
-        for i, msg in enumerate(message_history, 1):
-            role = msg.get("role", "unknown").upper()
-            conversation_text += f"{'=' * 80}\n"
-            conversation_text += f"TURN {i}: {role}\n"
-            conversation_text += f"{'=' * 80}\n"
-            
-            content = msg.get("content", "")
-            if isinstance(content, list):
-                # Extract text parts and note images
-                for item in content:
-                    if item.get("type") == "text":
-                        conversation_text += item["text"] + "\n"
-                    elif item.get("type") == "image_url":
-                        conversation_text += "[IMAGE ATTACHED]\n"
-            else:
-                conversation_text += str(content) + "\n"
-            
-            conversation_text += "\n"
-        
-        print(f"DEBUG: Total images sent: {image_count}")
-
-
         if not self.language_only:
             message_history = convert_format_2gemini(message_history)
 
@@ -574,21 +525,75 @@ class RemoteModel:
         out = response.choices[0].message.content
 
         out = fix_json(out)
-
-        # Add the model's response to the conversation text
-        conversation_text += f"{'=' * 80}\n"
-        conversation_text += f"MODEL RESPONSE\n"
-        conversation_text += f"{'=' * 80}\n"
-        conversation_text += out + "\n"
-        conversation_text += "\n" + "=" * 80 + "\n"
         
-        # Save the full conversation to a text file
-        conversation_file = os.path.join(debug_dir, "conversation.txt")
-        with open(conversation_file, "w", encoding="utf-8") as f:
-            f.write(conversation_text)
-        print(f"DEBUG: Saved conversation to {conversation_file}")
+        enable_debug_logs = os.environ.get("ENABLE_DEBUG_LOGS", "0") == "1"
+        if enable_debug_logs:
+            # Debug: Save images and message history
+            debug_dir = Path.cwd() / "debug_messages___dev"
+            os.makedirs(debug_dir, exist_ok=True)
+
+            # Count how many images we're sending and save them
+            image_count = 0
+            for msg in message_history:
+                if isinstance(msg.get("content"), list):
+                    for item in msg["content"]:
+                        if item.get("type") == "image_url":
+                            image_url = item["image_url"]["url"]
+                            # Save the base64 image to disk
+                            if image_url.startswith("data:image"):
+                                # Extract base64 data
+                                base64_data = image_url.split(",", 1)[1]
+                                image_bytes = base64.b64decode(base64_data)
+                                image_path = os.path.join(
+                                    debug_dir, f"image_{image_count}.png"
+                                )
+                                with open(image_path, "wb") as f:
+                                    f.write(image_bytes)
+                                print(f"DEBUG: Saved image to {image_path}")
+                                image_count += 1
+
+            # Build a readable text representation of the conversation
+            conversation_text = "=" * 80 + "\n"
+            conversation_text += "CONVERSATION HISTORY\n"
+            conversation_text += "=" * 80 + "\n\n"
+
+            for i, msg in enumerate(message_history, 1):
+                role = msg.get("role", "unknown").upper()
+                conversation_text += f"{'=' * 80}\n"
+                conversation_text += f"TURN {i}: {role}\n"
+                conversation_text += f"{'=' * 80}\n"
+
+                content = msg.get("content", "")
+                if isinstance(content, list):
+                    # Extract text parts and note images
+                    for item in content:
+                        if item.get("type") == "text":
+                            conversation_text += item["text"] + "\n"
+                        elif item.get("type") == "image_url":
+                            conversation_text += "[IMAGE ATTACHED]\n"
+                else:
+                    conversation_text += str(content) + "\n"
+
+                conversation_text += "\n"
+
+            print(f"DEBUG: Total images sent: {image_count}")
+
+            # Add the model's response to the conversation text
+            conversation_text += f"{'=' * 80}\n"
+            conversation_text += f"MODEL RESPONSE\n"
+            conversation_text += f"{'=' * 80}\n"
+            conversation_text += out + "\n"
+            conversation_text += "\n" + "=" * 80 + "\n"
+
+            # Save the full conversation to a text file
+            conversation_file = os.path.join(debug_dir, "conversation.txt")
+            with open(conversation_file, "w", encoding="utf-8") as f:
+                f.write(conversation_text)
+            print(f"DEBUG: Saved conversation to {conversation_file}")
 
         return out
+
+
 if __name__ == "__main__":
 
     model = RemoteModel(

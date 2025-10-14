@@ -30,12 +30,19 @@ sleep 2
 dones_file="running/${exp_name}_dones.txt"
 
 source ~/miniconda3/etc/profile.d/conda.sh
+
+# -------------------------------------------------------------------
+
 conda activate embench
 
-# echo "Running EB-ALFRED evaluation..."
-# python -m embodiedbench.main env=eb-alf model_name='vllm-model' exp_name="$exp_name" n_shots=$N_SHOTS
+echo "Running EB-ALFRED evaluation..."
+python -m embodiedbench.main env=eb-alf model_name='vllm-model' exp_name="$exp_name" n_shots=$N_SHOTS
 
-# echo "EB-ALFRED" >> "$dones_file"
+echo "EB-ALFRED" >> "$dones_file"
+
+# -------------------------------------------------------------------
+
+conda activate embench
 
 echo "Running EB-Habitat evaluation..."
 python -m embodiedbench.main env=eb-hab model_name="vllm-model" exp_name="$exp_name" n_shots=$N_SHOTS
@@ -56,17 +63,17 @@ python -m embodiedbench.main env=eb-man model_name="vllm-model" exp_name="$exp_n
 
 echo "EB-Manipulation" >> "$dones_file"
 
-# # -------------------------------------------------------------------
+# -------------------------------------------------------------------
 
-# conda activate embench_nav
+conda activate embench_nav
 
-# echo "Running EB-Navigation evaluation..."
-# python -m embodiedbench.main env=eb-nav model_name="vllm-model" exp_name="$exp_name" n_shots=$N_SHOTS
+echo "Running EB-Navigation evaluation..."
+python -m embodiedbench.main env=eb-nav model_name="vllm-model" exp_name="$exp_name" n_shots=$N_SHOTS
 
-# echo "EB-Navigation" >> "$dones_file"
+echo "EB-Navigation" >> "$dones_file"
 
-# # -------------------------------------------------------------------
+# -------------------------------------------------------------------
 
-# echo "All evaluations completed."
+echo "All evaluations completed."
 
-# echo "ALL DONE" >> "$dones_file"
+echo "ALL DONE" >> "$dones_file"
