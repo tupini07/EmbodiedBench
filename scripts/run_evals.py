@@ -138,28 +138,28 @@ def main():
 
     # Define evaluation tasks
     evaluations = [
-        {
-            "name": "EB-ALFRED",
-            "conda_env": "embench",
-            "env_vars": {},
-            "command": f"python -m embodiedbench.main env=eb-alf model_name='vllm-model' exp_name='{exp_name}' n_shots={n_shots}",
-        },
-        {
-            "name": "EB-Habitat",
-            "conda_env": "embench",
-            "env_vars": {},
-            "command": f"python -m embodiedbench.main env=eb-hab model_name='vllm-model' exp_name='{exp_name}' n_shots={n_shots}",
-        },
-        {
-            "name": "EB-Manipulation",
-            "conda_env": "embench_man",
-            "env_vars": {
-                "COPPELIASIM_ROOT": str(coppeliasim_root),
-                "LD_LIBRARY_PATH": f"${{LD_LIBRARY_PATH}}:{coppeliasim_root}",
-                "QT_QPA_PLATFORM_PLUGIN_PATH": str(coppeliasim_root),
-            },
-            "command": f"python -m embodiedbench.main env=eb-man model_name='vllm-model' exp_name='{exp_name}' n_shots={n_shots}",
-        },
+        # {
+        #     "name": "EB-ALFRED",
+        #     "conda_env": "embench",
+        #     "env_vars": {},
+        #     "command": f"python -m embodiedbench.main env=eb-alf model_name='vllm-model' exp_name='{exp_name}' n_shots={n_shots}",
+        # },
+        # {
+        #     "name": "EB-Habitat",
+        #     "conda_env": "embench",
+        #     "env_vars": {},
+        #     "command": f"python -m embodiedbench.main env=eb-hab model_name='vllm-model' exp_name='{exp_name}' n_shots={n_shots}",
+        # },
+        # {
+        #     "name": "EB-Manipulation",
+        #     "conda_env": "embench_man",
+        #     "env_vars": {
+        #         "COPPELIASIM_ROOT": str(coppeliasim_root),
+        #         "LD_LIBRARY_PATH": f"${{LD_LIBRARY_PATH}}:{coppeliasim_root}",
+        #         "QT_QPA_PLATFORM_PLUGIN_PATH": str(coppeliasim_root),
+        #     },
+        #     "command": f"python -m embodiedbench.main env=eb-man model_name='vllm-model' exp_name='{exp_name}' n_shots={n_shots}",
+        # },
         {
             "name": "EB-Navigation",
             "conda_env": "embench_nav",

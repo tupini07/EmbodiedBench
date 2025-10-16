@@ -168,8 +168,7 @@ search:
 
       # run experiments
       - export OPENAI_API_KEY="empty"
-      - export remote_url=http://localhost:43289/v1/
-      - export server_url=http://localhost:43289/v1/
+      - export remote_url=http://localhost:43289/v1
 
       - conda activate embench
       - pip install --upgrade 'ai2thor==2.4.22' 
