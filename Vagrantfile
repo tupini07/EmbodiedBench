@@ -1,6 +1,14 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
+# Check if running on Windows (not WSL)
+unless Gem.win_platform?
+  puts ""
+  puts "❌ ERROR: This Vagrantfile must be run from Windows (not WSL)"
+  puts ""
+  exit 1
+end
+
 Vagrant.configure("2") do |config|
   # Base box - Ubuntu 18.04 LTS
   config.vm.box = "ubuntu/bionic64"

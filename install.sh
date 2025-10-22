@@ -1,4 +1,7 @@
 #!/bin/bash
+
+set -e
+
 source "$(conda info --base)/etc/profile.d/conda.sh"
 export EMBODIED_BENCH_ROOT=$(pwd)
 
