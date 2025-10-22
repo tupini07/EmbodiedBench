@@ -5,28 +5,41 @@ Vagrant.configure("2") do |config|
   # Base box - Ubuntu 18.04 LTS
   config.vm.box = "ubuntu/bionic64"
 
+  # Note: Using default disk size (~40GB for ubuntu/bionic64)
+  # If you need more space later, you can resize manually or use a different base box
+
   # VirtualBox provider configuration
   config.vm.provider "virtualbox" do |vb|
     # Display the VirtualBox GUI when booting the machine
     vb.gui = true
-    
+
     # Increased memory and CPU for EmbodiedBench (8GB recommended)
     vb.memory = 8192
     vb.cpus = 4
-    
+
     # VM name
     vb.name = "embodiedbench-ubuntu-18.04"
-    
-    # Enable hardware acceleration if available
-    vb.customize ["modifyvm", :id, "--accelerate3d", "on"]
+
+    # Graphics configuration - use VBoxSVGA for better compatibility
+    vb.customize ["modifyvm", :id, "--graphicscontroller", "vmsvga"]
     vb.customize ["modifyvm", :id, "--vram", "128"]
+    vb.customize ["modifyvm", :id, "--accelerate3d", "on"]
   end
 
   # Network configuration - port forwarding for vLLM server
   config.vm.network "forwarded_port", guest: 43289, host: 43289, protocol: "tcp"
 
-  # Sync folder - make sure project files are accessible in VM
-  config.vm.synced_folder ".", "/vagrant"
+  # Sync folder - WSL compatibility fix
+  # Disable default synced folder and use rsync instead
+  config.vm.synced_folder ".", "/vagrant", disabled: true
+  config.vm.synced_folder ".", "/vagrant", type: "rsync",
+                                           rsync__exclude: [".git/", "*.qcow2", "*.iso", ".vagrant/",
+                                                            "*.pt", "CoppeliaSim_Pro_V4_1_0_Ubuntu20_04/",
+                                                            "habitat-lab/", "embodiedbench/envs/eb_habitat/data/",
+                                                            "embodiedbench/envs/eb_alfred/data/json_2.1.0/",
+                                                            "embodiedbench/envs/eb_manipulation/EB-Manipulation/",
+                                                            "embodiedbench/envs/eb_manipulation/PyRep/",
+                                                            "*.tar.xz", "install.log"]
 
   # Initial provisioning - install system dependencies
   config.vm.provision "shell", inline: <<-SHELL
@@ -50,6 +63,7 @@ Vagrant.configure("2") do |config|
     systemctl set-default graphical.target
     
     echo "=== System dependencies installed ==="
+    echo "=== Disk space available: $(df -h / | tail -1 | awk '{print $4}') ==="
   SHELL
 
   # Install Miniconda for the vagrant user
