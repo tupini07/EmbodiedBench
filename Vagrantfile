@@ -5,8 +5,16 @@ Vagrant.configure("2") do |config|
   # Base box - Ubuntu 18.04 LTS
   config.vm.box = "ubuntu/bionic64"
 
-  # Note: Using default disk size (~40GB for ubuntu/bionic64)
-  # If you need more space later, you can resize manually or use a different base box
+  # Install vagrant-disksize plugin if not present
+  unless Vagrant.has_plugin?("vagrant-disksize")
+    puts "Installing vagrant-disksize plugin..."
+    system("vagrant plugin install vagrant-disksize")
+    puts "Please run 'vagrant up' again."
+    exit
+  end
+
+  # Set disk size to 100GB for EmbodiedBench
+  config.disksize.size = "100GB"
 
   # VirtualBox provider configuration
   config.vm.provider "virtualbox" do |vb|
