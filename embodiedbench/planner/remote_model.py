@@ -52,8 +52,10 @@ class RemoteModel:
                     base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
                 )
             elif "Qwen2-VL" in self.model_name:
+                print(f"Initializing Qwen2-VL model with remote URL: {remote_url}")
                 self.model = OpenAI(base_url = remote_url)
             elif "Qwen2.5-VL" in self.model_name:
+                print(f"Initializing Qwen2.5-VL model with remote URL: {remote_url}")
                 self.model = OpenAI(base_url = remote_url)
             elif "Llama-3.2-11B-Vision-Instruct" in self.model_name:
                 self.model = OpenAI(base_url = remote_url)

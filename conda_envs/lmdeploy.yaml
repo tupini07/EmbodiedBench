@@ -160,7 +160,6 @@ dependencies:
       - psutil==6.0.0
       - ptyprocess==0.7.0
       - pure-eval==0.2.3
-      - pyairports==2.1.1
       - pyarrow==17.0.0
       - pycountry==24.6.1
       - pycparser==2.22
