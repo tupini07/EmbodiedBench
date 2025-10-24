@@ -148,7 +148,7 @@ def print_compact_table(env_name: str, experiments_data: Dict[str, Dict[str, Pat
     if not experiments_data:
         print("No results found for this environment.\n")
         return
-action_num_per_plan
+
     # Define key metrics to show (adjust based on what's most important)
     key_metrics = [
         "task_success",

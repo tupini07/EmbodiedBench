@@ -3,12 +3,12 @@
 # Parse command line arguments
 PORT=${1:-43289}
 
-# MODEL_NAME="Qwen2.5-VL-7B-Instruct"
-# MODEL_CHECKPOINT="Qwen/Qwen2.5-VL-7B-Instruct"
+MODEL_NAME="Qwen2.5-VL-7B-Instruct"
+MODEL_CHECKPOINT="Qwen/Qwen2.5-VL-7B-Instruct"
 
 
-MODEL_NAME="Qwen2.5-VL-7B-Instruct_BASE--aokvqa+videor1"
-MODEL_CHECKPOINT="/mnt/magmathor/training/checkpoints/Qwen2.5-VL-7B-Instruct_BASE__sft__llamafactory_ai2thor_aokvqa+videor1_tag_bs1_accum2_lr1e-5_cosine_0.1_ft_llm_qwen_base_pix_3136_12845056_model_singlenode/checkpoint-436/"
+# MODEL_NAME="Qwen2.5-VL-7B-Instruct_BASE--aokvqa+videor1"
+# MODEL_CHECKPOINT="/mnt/magmathor/training/checkpoints/Qwen2.5-VL-7B-Instruct_BASE__sft__llamafactory_ai2thor_aokvqa+videor1_tag_bs1_accum2_lr1e-5_cosine_0.1_ft_llm_qwen_base_pix_3136_12845056_model_singlenode/checkpoint-436/"
 
 
 # MODEL_NAME="Qwen2.5-VL-7B-Instruct_BASE--magmathor0.1p+aokvqa+videor1"

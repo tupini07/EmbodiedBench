@@ -25,8 +25,18 @@ fi
 
 echo "Running evaluation with exp_name: $exp_name"
 
-# Set DISPLAY for WSL (WSLg handles display automatically)
-export DISPLAY=":0"
+# Headless toggle: if HEADLESS=1, use software rendering (llvmpipe) and unset DISPLAY.
+if [ "${HEADLESS:-}" = "1" ]; then
+    echo "[HEADLESS] Enabling software rendering (EGL surfaceless).";
+    export CUDA_VISIBLE_DEVICES=""  # force CPU-only
+    export MAGNUM_DEFAULT_GL_CONTEXT_VERSION=330
+    export GALLIUM_DRIVER=llvmpipe
+    export EGL_PLATFORM=surfaceless
+    unset DISPLAY
+else
+    # Set DISPLAY for WSL (WSLg handles display automatically) or local X11
+    export DISPLAY=":0"
+fi
 
 dones_file="running/${exp_name}_dones.txt"
 
@@ -34,12 +44,12 @@ source ~/miniconda3/etc/profile.d/conda.sh
 
 # -------------------------------------------------------------------
 
-conda activate embench
+conda activate embench  # EB-Habitat & EB-ALFRED env
 
-echo "Running EB-ALFRED evaluation..."
-python -m embodiedbench.main env=eb-alf model_name='Qwen2.5-VL-7B-Instruct' exp_name="$exp_name" n_shots=$N_SHOTS
+# echo "Running EB-ALFRED evaluation..."
+# python -m embodiedbench.main env=eb-alf model_name='Qwen2.5-VL-7B-Instruct' exp_name="$exp_name" n_shots=$N_SHOTS
 
-echo "EB-ALFRED" >> "$dones_file"
+# echo "EB-ALFRED" >> "$dones_file"
 
 # -------------------------------------------------------------------
 

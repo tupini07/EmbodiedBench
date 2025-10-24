@@ -70,7 +70,7 @@ search:
       # This template is meant to be run with the `-i` flag to enable ssh access later.
       # ####################################################
       - set -ex
-      - export HF_TOKEN="$HF_TOKEN"
+      #- export HF_TOKEN="$HF_TOKEN"
 
       - MODEL_NAME=$$(awk -F'::' '{{print $$1}}' <<< "{model_config}")
       - MODEL_PATH=$$(awk -F'::' '{{print $$2}}' <<< "{model_config}")
