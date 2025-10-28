@@ -41,25 +41,73 @@ conda install -y -c conda-forge git-lfs
 python -m habitat_sim.utils.datasets_download --uids rearrange_task_assets
 mv data embodiedbench/envs/eb_habitat
 
-# Install EB-Manipulation
+# Install EB-Manipulation (idempotent & aligned with evaluation script)
 conda activate embench_man
 cd embodiedbench/envs/eb_manipulation
-wget https://downloads.coppeliarobotics.com/V4_1_0/CoppeliaSim_Pro_V4_1_0_Ubuntu20_04.tar.xz
-tar -xf CoppeliaSim_Pro_V4_1_0_Ubuntu20_04.tar.xz
-rm CoppeliaSim_Pro_V4_1_0_Ubuntu20_04.tar.xz
-mv CoppeliaSim_Pro_V4_1_0_Ubuntu20_04/ $EMBODIED_BENCH_ROOT
-export COPPELIASIM_ROOT=$EMBODIED_BENCH_ROOT/CoppeliaSim_Pro_V4_1_0_Ubuntu20_04
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$COPPELIASIM_ROOT
-export QT_QPA_PLATFORM_PLUGIN_PATH=$COPPELIASIM_ROOT
-git clone https://github.com/stepjam/PyRep.git
+
+echo "[EB-Man] Setting up CoppeliaSim + PyRep..."
+
+# Download CoppeliaSim only if not already present
+if [ ! -d CoppeliaSim_Pro_V4_1_0_Ubuntu20_04 ]; then
+	if [ ! -f CoppeliaSim_Pro_V4_1_0_Ubuntu20_04.tar.xz ]; then
+		echo "[EB-Man] Downloading CoppeliaSim archive..."
+		wget https://downloads.coppeliarobotics.com/V4_1_0/CoppeliaSim_Pro_V4_1_0_Ubuntu20_04.tar.xz
+	fi
+	echo "[EB-Man] Extracting CoppeliaSim..."
+	tar -xf CoppeliaSim_Pro_V4_1_0_Ubuntu20_04.tar.xz
+	rm -f CoppeliaSim_Pro_V4_1_0_Ubuntu20_04.tar.xz
+else
+	echo "[EB-Man] CoppeliaSim directory already exists. Skipping download/extract."
+fi
+
+# Prefer keeping CoppeliaSim local; evaluation script now falls back to this path.
+export COPPELIASIM_ROOT="$(pwd)/CoppeliaSim_Pro_V4_1_0_Ubuntu20_04"
+export LD_LIBRARY_PATH="${COPPELIASIM_ROOT}:${LD_LIBRARY_PATH}"
+export QT_QPA_PLATFORM_PLUGIN_PATH="$COPPELIASIM_ROOT"
+
+# Ensure usrset.txt exists for PyRep setup.py (some versions expect it)
+if [ ! -f "$COPPELIASIM_ROOT/system/usrset.txt" ]; then
+	echo "[EB-Man] Creating missing usrset.txt"
+	mkdir -p "$COPPELIASIM_ROOT/system" && touch "$COPPELIASIM_ROOT/system/usrset.txt"
+fi
+
+# Clone PyRep only if absent
+if [ ! -d PyRep ]; then
+	echo "[EB-Man] Cloning PyRep repository..."
+	git clone https://github.com/stepjam/PyRep.git
+else
+	echo "[EB-Man] PyRep already cloned. Pulling latest..."
+	(cd PyRep && git pull --ff-only || echo "[EB-Man] PyRep pull failed; keeping existing state")
+fi
+
 cd PyRep
 pip install -r requirements.txt
 pip install -e .
 cd ..
-pip install -r requirements.txt
+
+# Install any local environment requirements (if present)
+if [ -f requirements.txt ]; then
+	pip install -r requirements.txt || echo "[EB-Man] Warning: local env requirements install failed"
+fi
 pip install -e .
-cp ./simAddOnScript_PyRep.lua $COPPELIASIM_ROOT
-git clone https://huggingface.co/datasets/EmbodiedBench/EB-Manipulation
-mv EB-Manipulation/data/ ./
-rm -rf EB-Manipulation/
+
+# Copy addon script
+if [ -f simAddOnScript_PyRep.lua ]; then
+	cp ./simAddOnScript_PyRep.lua "$COPPELIASIM_ROOT" || echo "[EB-Man] Warning: failed to copy simAddOnScript_PyRep.lua"
+fi
+
+# Fetch EB-Manipulation dataset if missing
+if [ ! -d data ]; then
+	echo "[EB-Man] Downloading EB-Manipulation dataset..."
+	git clone https://huggingface.co/datasets/EmbodiedBench/EB-Manipulation tmp_eb_man_dataset
+	mv tmp_eb_man_dataset/data ./
+	rm -rf tmp_eb_man_dataset
+else
+	echo "[EB-Man] Dataset directory already present. Skipping clone."
+fi
+
+# Quick import test for PyRep
+python -c "import pyrep; print('[EB-Man] PyRep import OK')" || { echo '[EB-Man] PyRep import failed.' >&2; exit 1; }
+
+echo "[EB-Man] Setup complete. COPPELIASIM_ROOT=$COPPELIASIM_ROOT"
 cd ../../..
