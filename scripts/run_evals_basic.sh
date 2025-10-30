@@ -68,6 +68,7 @@ else
 fi
 
 dones_file="running/${exp_name}_dones.txt"
+echo "" > "$dones_file"
 
 source ~/miniconda3/etc/profile.d/conda.sh
 

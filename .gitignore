@@ -13,3 +13,9 @@ embodiedbench.egg-info1
 embodiedbench/envs/eb_habitat/data/
 dockers
 data
+
+/embodiedbench/envs/eb_manipulation/CoppeliaSim_Pro_V4_1_0_Ubuntu20_04/
+/embodiedbench/envs/eb_manipulation/amsolver.egg-info/
+/logs/
+
+/yolo11n.pt
