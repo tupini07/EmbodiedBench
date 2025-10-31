@@ -23,11 +23,11 @@ export def run_batch [
         DEBUG_REMOTE_MODEL_OUTPUTS: "0"         # print model outputs to the log
         ONLY_ONE_STEP_PLAN: "0"                 # model is asked to produce only one-step plans
         EMB_PLANNER_RETRY_TIMES: "1"            # how many times to retry planning if failed or empty plan
+        EMB_REASONING_MODE: "0"                 # whether to add the reasoning prompt postfix
         REMOTE_URL: "http://localhost:43289/v1" # default remote model where vllm is reachable
     },  
     --replicates:int = 3,
     --no_pause = false,        # boolean switch default
-    --reasoning_mode:string = "1",
     --stop_seqs:string = "</answer>",
     --prefix:string = ""       # optional prefix for run_name
 ] {
@@ -41,7 +41,6 @@ export def run_batch [
                     let merged_env = {
                         REMOTE_MODEL_TEMPERATURE: $temp
                         REMOTE_MODEL_MAX_TOKENS: $max_tokens
-                        EMB_REASONING_MODE: $reasoning_mode
                         REMOTE_MODEL_STOP_SEQS: $stop_seqs
                     } | merge $extra_env
                     let jobid = job spawn {
