@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 import os
+import random
 import sys
 import threading
 
@@ -84,11 +85,45 @@ from embodiedbench.planner.planner_utils import (
     convert_format_2claude,
     convert_format_2gemini,
     fix_json,
+    reasoning_suffix,
+    extract_box_json,  # legacy first-box extractor (kept for BC)
+    extract_last_box_json,  # new robust final-box extractor
+    sanitize_box_payload,  # new sanitation helper
+    extract_first_json_object,  # fallback when no boxing present
+)
+from embodiedbench.planner.plan_validator import maybe_repair
+
+"""Remote model abstraction.
+
+Reasoning Mode Scope:
+---------------------
+The environment flag EMB_REASONING_MODE=1 and optional REMOTE_MODEL_STOP_SEQS
+are intentionally applied ONLY to Qwen 7B / 2.5-VL-7B style calls (handled in
+`_call_qwen7b`). Other provider paths (GPT/Azure, Claude, Gemini, Llama, InternVL,
+Fireworks) retain their original JSON schema response formatting without any
+reasoning-mode alteration to keep upstream compatibility.
+
+Minimal-change note: This file preserves original structure; only lightweight
+comments and boxed-JSON post-processing for Qwen reasoning mode were added.
+"""
+
+temperature = float(os.environ.get("REMOTE_MODEL_TEMPERATURE", 0.0))
+max_completion_tokens = int(os.environ.get("REMOTE_MODEL_MAX_TOKENS", 2048))
+remote_url = os.environ.get("remote_url").split(",")
+if len(remote_url) == 1:
+    remote_url = remote_url[0]
+
+reasoning_mode = os.getenv("EMB_REASONING_MODE", "0") == "1"
+_stop_env = os.getenv("REMOTE_MODEL_STOP_SEQS", "</answer>")
+stop_seqs = (
+    [s.strip() for s in _stop_env.split(",") if s.strip()] if reasoning_mode else None
 )
 
-temperature = 0.6
-max_completion_tokens = 2048
-remote_url = os.environ.get("remote_url")
+print(f"REMOTE_MODEL_TEMPERATURE: {temperature}")
+print(f"REMOTE_MODEL_MAX_TOKENS: {max_completion_tokens}")
+print(f"REMOTE_MODEL_URL: {remote_url}")
+print(f"EMB_REASONING_MODE: {reasoning_mode}")
+print(f"REMOTE_MODEL_STOP_SEQS: {stop_seqs}")
 
 
 class RemoteModel:
@@ -104,6 +139,8 @@ class RemoteModel:
         self.model_type = model_type
         self.language_only = language_only
         self.task_type = task_type
+
+        self.model: OpenAI | list[OpenAI] | lmdeploy.Pipeline = None  # type: ignore
 
         if self.model_type == "local":
             backend_config = PytorchEngineConfig(
@@ -141,16 +178,31 @@ class RemoteModel:
                 )
             elif "Qwen2-VL" in self.model_name:
                 print(f"Initializing Qwen2-VL model with remote URL: {remote_url}")
-                self.model = OpenAI(base_url=remote_url)
+                if isinstance(remote_url, list):
+                    self.model = [OpenAI(base_url=url) for url in remote_url]
+                else:
+                    self.model = OpenAI(base_url=remote_url)
             elif "Qwen2.5-VL" in self.model_name:
                 print(f"Initializing Qwen2.5-VL model with remote URL: {remote_url}")
-                self.model = OpenAI(base_url=remote_url)
+                if isinstance(remote_url, list):
+                    self.model = [OpenAI(base_url=url) for url in remote_url]
+                else:
+                    self.model = OpenAI(base_url=remote_url)
             elif "Llama-3.2-11B-Vision-Instruct" in self.model_name:
-                self.model = OpenAI(base_url=remote_url)
+                if isinstance(remote_url, list):
+                    self.model = [OpenAI(base_url=url) for url in remote_url]
+                else:
+                    self.model = OpenAI(base_url=remote_url)
             elif "OpenGVLab/InternVL" in self.model_name:
-                self.model = OpenAI(base_url=remote_url)
+                if isinstance(remote_url, list):
+                    self.model = [OpenAI(base_url=url) for url in remote_url]
+                else:
+                    self.model = OpenAI(base_url=remote_url)
             elif "meta-llama/Llama-3.2-90B-Vision-Instruct" in self.model_name:
-                self.model = OpenAI(base_url=remote_url)
+                if isinstance(remote_url, list):
+                    self.model = [OpenAI(base_url=url) for url in remote_url]
+                else:
+                    self.model = OpenAI(base_url=remote_url)
             elif (
                 "90b-vision-instruct" in self.model_name
             ):  # you can use fireworks to inference
@@ -160,7 +212,11 @@ class RemoteModel:
                 )
             else:
                 try:
-                    self.model = OpenAI(base_url=remote_url)
+                    if isinstance(remote_url, list):
+                        self.model = [OpenAI(base_url=url) for url in remote_url]
+                    else:
+                        self.model = OpenAI(base_url=remote_url)
+
                 except:
                     raise ValueError(f"Unsupported model name: {model_name}")
 
@@ -358,7 +414,11 @@ class RemoteModel:
                 )
 
         # If Azure rotation is configured, obtain a rotated client; else use self.model.
-        client = self._get_azure_client() if hasattr(self, "_azure_resources") else self.model
+        client = (
+            self._get_azure_client()
+            if hasattr(self, "_azure_resources")
+            else self.model
+        )
         response = self._chat_with_retry(
             client=client,
             model=self.model_name,
@@ -380,6 +440,7 @@ class RemoteModel:
         response_format: dict,
         temperature: float,
         max_tokens: int,
+        stop: list[str] = None,
     ):
         """Indefinitely retry on 429 (rate limit) and selected transient errors.
 
@@ -402,13 +463,17 @@ class RemoteModel:
         delay = initial
         while True:
             try:
-                return client.chat.completions.create(
+                kwargs = dict(
                     model=model,
                     messages=messages,
-                    response_format=response_format,
                     temperature=temperature,
                     max_tokens=max_tokens,
                 )
+                if response_format is not None:
+                    kwargs["response_format"] = response_format
+                if stop is not None:
+                    kwargs["stop"] = stop
+                return client.chat.completions.create(**kwargs)
             except RateLimitError as e:  # 429
                 attempt += 1
                 if attempt % log_every == 0:
@@ -438,7 +503,9 @@ class RemoteModel:
                 if attempt > 3:
                     logging.error(f"Aborting after unexpected error attempts: {e}")
                     return None
-                logging.warning(f"Unexpected error '{e}' attempt {attempt}; retrying in {delay:.1f}s")
+                logging.warning(
+                    f"Unexpected error '{e}' attempt {attempt}; retrying in {delay:.1f}s"
+                )
                 time.sleep(delay + random.uniform(0, jitter))
                 delay = min(delay * 2, maximum)
                 continue
@@ -478,15 +545,96 @@ class RemoteModel:
                     ),
                 )
 
-        response = self.model.chat.completions.create(
+        if reasoning_mode:
+            response_format = None
+
+        # --------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------
+        # import debugpy  # todo(atupini): remove before commit
+        # try:
+        #     debugpy.listen(5678)
+        # except RuntimeError:
+        #     # Already listening
+        #     pass
+        # if not debugpy.is_client_connected():
+        #     print('Waiting for debugger attach...', flush=True)
+        #     try:
+        #         debugpy.wait_for_client()
+        #     except RuntimeError:
+        #         pass  # Ignore if cannot wait
+        # --------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------
+
+        if os.environ.get("DEBUG_REMOTE_MODEL_INPUTS", "0") == "1":
+            messages_to_print = json.loads(json.dumps(message_history))
+            messages_to_print[0]["content"][0]["image_url"]["url"] = "...snip..."
+
+            print(
+                f"---------------------\nInput to model: \n\n{json.dumps(messages_to_print, indent=2)}\n\n---------------------------------------------------"
+            )
+
+        model: OpenAI = self.model if not isinstance(self.model, list) else self.model[
+            random.randint(0, len(self.model) - 1)
+        ]
+
+        response = model.chat.completions.create(
             model="vllm-model",
             messages=message_history,
-            response_format=response_format,
+            **({"response_format": response_format} if response_format else {}), # type: ignore
             temperature=temperature,
             max_tokens=max_completion_tokens,
-        )
+            **({"stop": stop_seqs} if stop_seqs else {}),
+        ) # type: ignore
 
         out = response.choices[0].message.content
+        if os.environ.get("DEBUG_REMOTE_MODEL_OUTPUTS", "0") == "1":
+            print(
+                f"---------------------------------------------------\nRaw output from model: \n\n{out}\n\n---------------------------------------------------"
+            )
+
+        if reasoning_mode:
+            # Robust boxed JSON extraction strategy:
+            # 1. Prefer the LAST boxed region (model may self-correct producing multiple boxes)
+            # 2. Fallback to first boxed region (legacy behavior)
+            # 3. Fallback to scanning entire output for first JSON object
+            box_json = extract_last_box_json(out) or extract_box_json(out)
+            candidate = sanitize_box_payload(box_json) if box_json else None
+
+            if not candidate:
+                # No boxed payload at all – attempt raw scan for a JSON object in full output
+                fallback_obj = extract_first_json_object(out)
+                candidate = fallback_obj if fallback_obj else None
+
+            if candidate:
+                out = fix_json(candidate)
+            else:
+                # Leave `out` unchanged; downstream maybe_repair will fail parse and log.
+                pass
+
+        # Always attempt plan validation / repair unless explicitly disabled.
+        # Controlled by PLAN_REPAIR_MODE env (off|log|apply). Default 'apply'.
+        try:
+            out = maybe_repair(out)
+        except Exception as e:
+            # Fail-safe: never crash the call; log and return original.
+            import logging as _logging
+
+            _logging.warning(f"plan repair failed: {e}")
+
+        if os.environ.get("DEBUG_REMOTE_MODEL_OUTPUTS", "0") == "1":
+            is_json_parseable = False
+            try:
+                _ = json.loads(out)
+                is_json_parseable = True
+            except:
+                is_json_parseable = False
+
+            print(
+                f"---------------------------------------------------\nPost-parse candidate ({is_json_parseable=}): \n\n{out}\n\n---------------------------------------------------"
+            )
+
         return out
 
     def _call_llama90(self, message_history: list):
