@@ -2,9 +2,10 @@ description: DEbug inference Help
 
 target:
   service: sing
-  name: palisades24
+  # name: palisades24
   # name: palisades26
   # name: palisades27
+  name: msrresrchvc
   # name: msrresrchbasicvc
   # name: msrresrchlabbasic # <- this is the one that has a bunch of v100s
   workspace_name: atupinirgws
@@ -24,6 +25,7 @@ environment:
     - conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
     - conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
     - conda create -n glm-vllm python==3.12 -y
+    - sudo apt install -yq neovim
 
 storage:
   magmathor:
@@ -57,7 +59,8 @@ code:
 search:
   job_template:
     name: EmbodiedBench-eval-{model_config}
-    sku: 1x 40G2-A100
+    sku: 1x 80G2-A100
+    # sku: 1x 40G2-A100
     priority: high
     mpi: False
     sla_tier: Premium

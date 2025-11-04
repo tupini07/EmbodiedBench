@@ -6,7 +6,7 @@ import numpy as np
 import cv2
 import json
 from embodiedbench.planner.planner_config.generation_guide import llm_generation_guide, vlm_generation_guide
-from embodiedbench.planner.planner_utils import local_image_to_data_url, template, template_lang, fix_json
+from embodiedbench.planner.planner_utils import local_image_to_data_url, template, template_lang, fix_json, reasoning_suffix, extract_box_json
 from embodiedbench.planner.remote_model import RemoteModel
 from embodiedbench.planner.custom_model import CustomModel
 from embodiedbench.main import logger
@@ -200,7 +200,13 @@ class VLMPlanner():
         prompt = self.process_prompt(user_instruction, prev_act_feedback=self.episode_act_feedback)
         # some models do not support json scheme, add style into prompt
         if 'claude' in self.model_name or 'InternVL' in self.model_name or 'Qwen2-VL' in self.model_name or 'Qwen2.5-VL' in self.model_name or self.model_type == 'custom':
-            prompt = prompt + template_lang if self.language_only else prompt + template
+            prompt = prompt + (template_lang if self.language_only else template)
+        
+        if os.getenv("EMB_REASONING_MODE", "0") == "1":
+            prompt += reasoning_suffix
+
+        if os.getenv("ONLY_ONE_STEP_PLAN", "0") == "1":
+            prompt += "\n\nPlease include only a single action in your output `executable_plan` list."
 
         if self.model_type == 'custom':
             return self.act_custom(prompt, obs) 
@@ -239,6 +245,8 @@ class VLMPlanner():
                     time.sleep(20)
                 out = self.model.respond(self.episode_messages)
         logger.debug(f"Model Output:\n{out}\n")
+        reasoning_mode = os.getenv("EMB_REASONING_MODE", "0") == "1"
+        parse_target = out
 
         if self.chat_history:
             self.episode_messages.append(
@@ -247,7 +255,8 @@ class VLMPlanner():
                 "content": [{"type": "text", "text": out}],
                 }
             )
-        action = self.json_to_action(out)
+
+        action = self.json_to_action(parse_target)
         self.planner_steps += 1
         return action, out
 

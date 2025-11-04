@@ -7,11 +7,12 @@ import ast
 import random
 import time
 import logging
+import os
 from mimetypes import guess_type
 from embodiedbench.envs.eb_manipulation.eb_man_utils import ROTATION_RESOLUTION, VOXEL_SIZE
 from embodiedbench.planner.remote_model import RemoteModel
 from embodiedbench.planner.custom_model import CustomModel
-from embodiedbench.planner.planner_utils import local_image_to_data_url, template_manip, template_lang_manip
+from embodiedbench.planner.planner_utils import local_image_to_data_url, template_manip, template_lang_manip, reasoning_suffix, extract_box_json
 from embodiedbench.main import logger
 
 VISUAL_ICL_EXAMPLES_PATH = "embodiedbench/evaluator/config/visual_icl_examples/eb_manipulation"
@@ -290,10 +291,15 @@ class ManipPlanner():
                 arm = [random.randint(0, VOXEL_SIZE) for _ in range(3)] + [random.randint(0, (360 / ROTATION_RESOLUTION) - 1) for _ in range(3)]
                 gripper = [1.0]  # Always open
                 action = arm + gripper
-                return [action], None
+                return [action], None, False
             if type(executable_plan) == str:
                 try:
                     executable_plan = ast.literal_eval(executable_plan)
+
+                    # if executable plan is a single list then wrap it (eg, [5, 38, 30, 6, 60, 96, 1])
+                    if type(executable_plan) == list and type(executable_plan[0]) == int:
+                        executable_plan = [executable_plan]
+
                 except Exception as e:
                     print("Failed to decode string executable plan to list executable plan:", e)
                     print('random action')
@@ -301,7 +307,7 @@ class ManipPlanner():
                     arm = [random.randint(0, VOXEL_SIZE) for _ in range(3)] + [random.randint(0, (360 / ROTATION_RESOLUTION) - 1) for _ in range(3)]
                     gripper = [1.0]  # Always open
                     action = arm + gripper
-                    return [action], None
+                    return [action], None, False
             if len(executable_plan) > 0:
                 for x in executable_plan:
                     if type(x) == tuple:
@@ -323,13 +329,13 @@ class ManipPlanner():
                             print('random action')
                             action = [random.randint(0, VOXEL_SIZE) for _ in range(3)] + [random.randint(0, (360 / ROTATION_RESOLUTION) - 1) for _ in range(3)] + [1.0]
                             self.output_json_error += 1
-                            return [action], None
+                            return [action], None, False
                     action.append(list_action)
-                return action, json_object
+                return action, json_object, True
             else:
                 print("Empty executable plan, quit the episode ...")
                 self.output_json_error = -1
-                return [], output_text
+                return [], output_text, False
         except json.JSONDecodeError as e:
             print("Failed to decode JSON:", e)
             print('random action')
@@ -337,7 +343,7 @@ class ManipPlanner():
             arm = [random.randint(0, VOXEL_SIZE) for _ in range(3)] + [random.randint(0, (360 / ROTATION_RESOLUTION) - 1) for _ in range(3)]
             gripper = [1.0]  # Always open
             action = arm + gripper
-            return [action], None
+            return [action], None, False
         except Exception as e:
             print("An expected error occurred:", e)
             print('random action')
@@ -345,7 +351,7 @@ class ManipPlanner():
             arm = [random.randint(0, VOXEL_SIZE) for _ in range(3)] + [random.randint(0, (360 / ROTATION_RESOLUTION) - 1) for _ in range(3)]
             gripper = [1.0]  # Always open
             action = arm + gripper
-            return [action], None
+            return [action], None, False
     
     def reset(self):
         # at the beginning of the episode
@@ -371,11 +377,19 @@ class ManipPlanner():
         else:
             obs = observation # input image path
         
+        reasoning_mode = os.getenv("EMB_REASONING_MODE", "0") == "1"
         if self.visual_icl and not self.language_only:
             first_prompt, task_prompt = self.process_prompt_visual_icl(user_instruction, avg_obj_coord, prev_act_feedback=self.episode_act_feedback)
             if 'claude' in self.model_name or 'InternVL' in self.model_name or 'Qwen2-VL' in self.model_name or 'Qwen2.5-VL' in self.model_name:
                 task_prompt += "\n\n"
                 task_prompt = task_prompt + template_lang_manip if self.language_only else task_prompt + template_manip
+
+            if os.getenv("EMB_REASONING_MODE", "0") == "1":
+                task_prompt += reasoning_suffix
+
+            if os.getenv("ONLY_ONE_STEP_PLAN", "0") == "1":
+                task_prompt += "\n\nPlease include only a single action in your output `executable_plan` list."
+
             if len(self.episode_messages) == 0:
                 self.episode_messages = self.get_message_visual_icl(obs, first_prompt, task_prompt, task_variation)
             else:
@@ -388,6 +402,13 @@ class ManipPlanner():
             if 'claude' in self.model_name or 'InternVL' in self.model_name or 'Qwen2-VL' in self.model_name or 'Qwen2.5-VL' in self.model_name:
                 task_prompt += "\n\n"
                 task_prompt = task_prompt + template_lang_manip if self.language_only else task_prompt + template_manip
+
+            if os.getenv("EMB_REASONING_MODE", "0") == "1":
+                task_prompt += reasoning_suffix
+
+            if os.getenv("ONLY_ONE_STEP_PLAN", "0") == "1":
+                task_prompt += "\n\nPlease include only a single action in your output `executable_plan` list."
+
             if len(self.episode_messages) == 0:
                 self.episode_messages = self.get_message(obs, full_example_prompt, task_prompt)
             else:
@@ -395,7 +416,8 @@ class ManipPlanner():
                     self.episode_messages = self.get_message(obs, full_example_prompt, task_prompt, self.episode_messages)
                 else:
                     self.episode_messages = self.get_message(obs, full_example_prompt, task_prompt)
-        
+
+
         if self.model_type == 'custom':
             return self.act_custom(full_example_prompt + task_prompt + "\n\n" + template_manip, obs[0]) 
 
@@ -430,9 +452,15 @@ class ManipPlanner():
             )
         
         logger.debug(f"Model Output:\n{out}\n")
+        parse_target = out
+        if reasoning_mode:
+            box_json = extract_box_json(out)
+            if box_json:
+                logger.debug(f"Extracted Box JSON:\n{box_json}\n")
+                parse_target = box_json
         self.planner_steps += 1
-        action, json_output = self.json_to_action(out)
-        return action, out
+        action, json_output, valid = self.json_to_action(parse_target)
+        return action, out, valid
 
     def update_info(self, info):
         env_feedback = info['env_feedback']

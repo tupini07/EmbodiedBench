@@ -8,7 +8,7 @@ import json
 # from lmdeploy import pipeline, GenerationConfig, PytorchEngineConfig
 from openai import OpenAI
 from embodiedbench.planner.planner_config.generation_guide import llm_generation_guide, vlm_generation_guide
-from embodiedbench.planner.planner_utils import local_image_to_data_url, truncate_message_prompts
+from embodiedbench.planner.planner_utils import local_image_to_data_url, truncate_message_prompts, reasoning_suffix, extract_box_json
 # from embodiedbench.planner.eb_navigation.RemoteModel_claude import RemoteModel
 from embodiedbench.planner.remote_model import RemoteModel
 from embodiedbench.planner.custom_model import CustomModel
@@ -52,7 +52,6 @@ class EBNavigationPlanner():
             else:
                 self.icl_text_only = False
 
-
         self.first_prompt = f'''To achieve the task, 1. Reason about the current visual state and your final goal, and 2. Reflect on the effect of previous actions. 3. Summarize how you learn from the Strategy and Examples provided \
 \nAim for about 1-2 actions in this step. !!!Notice: you cannot assess the situation until the whole plan in this planning step is finished executed, so plan accordingly.\
 \nAt last, output the action id(s) (0 ~ {len(self.actions)-1}) from the available actions to execute. 
@@ -69,7 +68,6 @@ The input given to you is {'an first person view observation' if not self.multis
 
 You are supposed to output in JSON.{template_lang if self.language_only else template}'''
 
-        
         if model_type == 'custom':
             self.model = CustomModel(model_name, language_only)
         else:
@@ -279,6 +277,13 @@ You are supposed to output in JSON.{template_lang if self.language_only else tem
             obs = observation # input image path
         
         prompt = self.process_prompt(user_instruction, prev_act_feedback=self.episode_act_feedback)
+
+        if os.getenv("EMB_REASONING_MODE", "0") == "1":
+            prompt += reasoning_suffix
+
+        if os.getenv("ONLY_ONE_STEP_PLAN", "0") == "1":
+            prompt += "\n\nPlease include only a single action in your output `executable_plan` list."
+
         if self.model_type == 'custom':
             return self.act_custom(prompt, obs)
 
@@ -307,7 +312,7 @@ You are supposed to output in JSON.{template_lang if self.language_only else tem
             print(e)
             if 'qwen' in self.model_name:
                 return -2,'''{"visual_state_description":"qwen model generate empty action due to inappropriate content check", "reasoning_and_reflection":"invalid json, random action",
-                   "language_plan":"invalid json, random action"}'''
+                   "language_plan":"invalid json, random action"}''', False
 
         if self.chat_history:
             self.episode_messages.append(
@@ -318,14 +323,17 @@ You are supposed to output in JSON.{template_lang if self.language_only else tem
             )
             
         logger.debug(f"Model Output:\n{out}\n")
-        action, valid = self.json_to_action(out)
+        reasoning_mode = os.getenv("EMB_REASONING_MODE", "0") == "1"
+        parse_target = out
+
+        action, valid = self.json_to_action(parse_target)
         self.planner_steps += 1
         if valid:
-            return action, out
+            return action, out, valid
         else:
             out = '''{"visual_state_description":"invalid json, random action", "reasoning_and_reflection":"invalid json, random action",
                    "language_plan":"invalid json, random action"}'''
-            return action, out
+            return action, out, valid
 
     def update_info(self, info):
         """Update episode feedback history."""

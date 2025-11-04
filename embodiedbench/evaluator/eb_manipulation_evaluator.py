@@ -126,11 +126,24 @@ class EB_ManipulationEvaluator():
             reasoning_list = []
 
             while not done:
-                if self.config['multistep']:
-                    action, reasoning = self.planner.act(image_history, user_instruction, str(avg_obj_coord), self.env.current_task_variation)
-                else:
-                    action, reasoning = self.planner.act(img_path_list, user_instruction, str(avg_obj_coord), self.env.current_task_variation)
-                print(f"Planner Output Action: {action}")
+                remaining_retries = int(os.getenv("EMB_PLANNER_RETRY_TIMES", "1"))
+                assert remaining_retries >= 1, "EMB_PLANNER_RETRY_TIMES must be at least 1"
+
+                action, reasoning = None, None
+                while remaining_retries > 0:
+                    if self.config['multistep']:
+                        action, reasoning, valid = self.planner.act(image_history, user_instruction, str(avg_obj_coord), self.env.current_task_variation)
+                    else:
+                        action, reasoning, valid = self.planner.act(img_path_list, user_instruction, str(avg_obj_coord), self.env.current_task_variation)
+
+                    remaining_retries -= 1
+                    if remaining_retries > 0 and not valid:
+                        print(f"Replanning due to invalid or empty plan. Remaining retries: {remaining_retries}")
+                        continue
+                    
+                    break
+
+                print(f"[Episode:{self.env._current_episode_num};Step:{self.env._current_step}] Planner Output Action: {action}")
                 reasoning_list.append(reasoning)
                 if len(action) == 0:
                     episode_info['reward'].append(0)

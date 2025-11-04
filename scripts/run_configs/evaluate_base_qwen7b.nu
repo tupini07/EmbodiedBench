@@ -6,8 +6,8 @@
 
 use _common.nu *
 
-let temps = [0.0, 0.6]
-let max_tokens_list = [2048, 4096]
+let temps = [0.0]
+let max_tokens_list = [2048]
 
 let extra_env = { 
     DEBUG_REMOTE_MODEL_INPUTS: "0"

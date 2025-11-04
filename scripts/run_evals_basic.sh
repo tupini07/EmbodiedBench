@@ -16,22 +16,41 @@ export EXTRA_ARGS_EB_NAV=${EXTRA_ARGS_EB_NAV:-""}
 
 export MODEL_NAME=${MODEL_NAME:-"Qwen2.5-VL-7B-Instruct"}
 
+# Optional rerun control flags:
+#   SKIP_IF_DONE=1  -> Skip if a prior running/dones/${exp_name}_dones.txt contains ALL DONE
+#   FORCE_RERUN=1   -> Ignore skip check and force a rerun
+export SKIP_IF_DONE=${SKIP_IF_DONE:-"1"}
+export FORCE_RERUN=${FORCE_RERUN:-"0"}
+
 if [ -z "$exp_name" ]; then
     echo "Usage: $0 <exp_name>"
     exit 1
 fi
 
-# ensure that remoteURL is reachable
-if ! curl -si "$REMOTE_URL/models" | head -n 1 | grep "200 OK" > /dev/null; then
-    echo "Error: REMOTE_URL $REMOTE_URL is not reachable."
-    echo ""
-    echo "Please ensure SSH tunnel is running in another terminal:"
-    echo ""
-    echo "    amlt ssh \"job_name\" -o \"StrictHostKeyChecking=no\" -o \"-4 -L 43289:localhost:43289\""
-    echo ""
-    echo ""
-    exit 1
+# -------------------------------------------------------------------
+# Early skip logic (before remote URL check & destructive operations)
+if [ "$FORCE_RERUN" = "1" ]; then
+    echo "[FORCE_RERUN] Forcing rerun for exp_name '$exp_name' (ignoring any existing results)."
+else
+    mkdir -p "running/dones/"
+    dones_file_pre="running/dones/${exp_name}_dones.txt"
+    if [ "$SKIP_IF_DONE" = "1" ] && [ -f "$dones_file_pre" ] && grep -q "ALL DONE" "$dones_file_pre"; then
+        echo "[SKIP] Completed run detected via $dones_file_pre (contains ALL DONE). Skipping execution."
+        exit 0
+    fi
 fi
+
+# # ensure that remoteURL is reachable
+# if ! curl -si "$REMOTE_URL/models" | head -n 1 | grep "200 OK" > /dev/null; then
+#     echo "Error: REMOTE_URL $REMOTE_URL is not reachable."
+#     echo ""
+#     echo "Please ensure SSH tunnel is running in another terminal:"
+#     echo ""
+#     echo "    amlt ssh \"job_name\" -o \"StrictHostKeyChecking=no\" -o \"-4 -L 43289:localhost:43289\""
+#     echo ""
+#     echo ""
+#     exit 1
+# fi
 
 # -------------------------------------------------------------------
 # print evaluation configuration
@@ -51,8 +70,11 @@ echo "=========================================================="
 
 echo "Running evaluation with exp_name: $exp_name"
 
-# remove results dir if exp_name was already present
-find "./running"/ -type d -name "${MODEL_NAME}_${exp_name}" -exec rm -rf {} +
+# remove results dir if exp_name was already present (only when not skipping)
+mkdir -p "./running/"
+if [ "$FORCE_RERUN" = "1" ] || [ "$SKIP_IF_DONE" != "1" ] || ! { [ -f "running/dones/${exp_name}_dones.txt" ] && grep -q "ALL DONE" "running/dones/${exp_name}_dones.txt"; }; then
+    find "./running"/ -type d -name "${MODEL_NAME}_${exp_name}" -exec rm -rf {} +
+fi
 
 # Headless toggle: if HEADLESS=1, use software rendering (llvmpipe) and unset DISPLAY.
 if [ "${HEADLESS:-}" = "1" ]; then
@@ -67,7 +89,7 @@ else
     export DISPLAY=":1"
 fi
 
-dones_file="running/${exp_name}_dones.txt"
+dones_file="running/dones/${exp_name}_dones.txt"
 echo "" > "$dones_file"
 
 source ~/miniconda3/etc/profile.d/conda.sh

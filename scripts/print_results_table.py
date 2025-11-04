@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 from tabulate import tabulate
+import re
+import statistics
 
 
 def load_summary_json(file_path: Path) -> Dict[str, Any]:
@@ -31,7 +33,8 @@ def parse_results_structure(running_dir: Path) -> Dict[str, Dict[str, Dict[str, 
     Returns:
         Dict with structure: {env_name: {experiment_name: {dimension: summary_json_path}}}
     """
-    results = defaultdict(lambda: defaultdict(dict))
+    # Nested mapping: env -> experiment -> dimension -> summary path
+    results: Dict[str, Dict[str, Dict[str, Path]]] = defaultdict(lambda: defaultdict(dict))  # type: ignore
 
     # Iterate through each environment directory
     for env_dir in running_dir.iterdir():
@@ -244,6 +247,112 @@ def print_summary_table(env_name: str, experiments_data: Dict[str, Dict[str, Pat
     print()
 
 
+def base_experiment_name(exp_name: str) -> str:
+    r"""Strip trailing _rep\d+ from an experiment name to get the base experiment identifier.
+
+    If no repetition suffix present, returns the original name.
+    """
+    return re.sub(r"_rep\d+$", "", exp_name)
+
+
+def compute_mean_std(values: List[float]) -> Optional[tuple]:
+    """Return (mean, std) for a list of numeric values. Uses sample std (statistics.stdev).
+
+    Returns None if list is empty. If only one value, std is 0.0.
+    """
+    if not values:
+        return None
+    if len(values) == 1:
+        return (values[0], 0.0)
+    try:
+        return (statistics.mean(values), statistics.stdev(values))
+    except statistics.StatisticsError:
+        # Fallback in pathological cases
+        return (statistics.mean(values), 0.0)
+
+
+def format_mean_std(pairs: Optional[tuple], percent: bool = True) -> str:
+    """Format mean ± std as percentage with two decimals, e.g. 4.67% ± 1.15%.
+
+    If pairs is None -> '-'. If percent False, show raw with 3 decimals.
+    """
+    if pairs is None:
+        return "-"
+    mean, std = pairs
+    if percent:
+        return f"{mean*100:.2f}% ± {std*100:.2f}%"
+    else:
+        return f"{mean:.3f} ± {std:.3f}"
+
+
+def print_aggregated_summary_tables(env_name: str, experiments_data: Dict[str, Dict[str, Path]]):
+    """Print aggregated summary table: groups repetitions and shows mean ± std for task_success per dimension and invalid action ratio.
+
+        Strategy:
+            1. Derive base experiment names (strip _repX)
+            2. For each base experiment & dimension collect task_success values
+            3. Also collect num_invalid_action_ratio per dimension then average per repetition, then aggregate those averages across repetitions.
+                 (Alternatively average over all dimension ratios per repetition then aggregate; we mirror existing summary which averages across dimensions.)
+    We will mimic existing summary's average invalid action ratio: for each repetition (exp name with rep suffix) we compute the average of available dimension ratios; then we aggregate across reps for same base.
+    """
+    # Collect dimensions across this environment
+    all_dimensions_set: Set[str] = set()
+    for dims in experiments_data.values():
+        all_dimensions_set.update(dims.keys())
+    all_dimensions_list = sorted(all_dimensions_set)
+    if not all_dimensions_list:
+        return
+
+    # Map: base_name -> dimension -> list of task_success values
+    grouped: Dict[str, Dict[str, List[float]]] = defaultdict(lambda: defaultdict(list))
+    # Map: base_name -> list of avg invalid action ratio per repetition
+    grouped_invalid: Dict[str, List[float]] = defaultdict(list)
+
+    # Temporary: base_name -> rep_id -> list of invalid ratios to compute per-rep average
+    per_rep_invalid: Dict[str, Dict[str, List[float]]] = defaultdict(lambda: defaultdict(list))
+
+    for exp_name, dims in experiments_data.items():
+        base_name = base_experiment_name(exp_name)
+        rep_match = re.search(r"(_rep\d+)$", exp_name)
+        rep_id = rep_match.group(1) if rep_match else "_rep0"  # default single rep
+        invalid_values_this_rep: List[float] = []
+        for dimension, path in dims.items():
+            data = load_summary_json(path)
+            ts = data.get("task_success")
+            if isinstance(ts, (int, float)) and not (isinstance(ts, float) and math.isnan(ts)):
+                grouped[base_name][dimension].append(float(ts))
+            invalid_ratio = data.get("num_invalid_action_ratio")
+            if isinstance(invalid_ratio, (int, float)) and not (isinstance(invalid_ratio, float) and math.isnan(invalid_ratio)):
+                per_rep_invalid[base_name][rep_id].append(float(invalid_ratio))
+
+    # Compute per-rep average invalid ratios then aggregate
+    for base_name, rep_dict in per_rep_invalid.items():
+        for rep_id, ratios in rep_dict.items():
+            if ratios:
+                grouped_invalid[base_name].append(sum(ratios)/len(ratios))
+
+    # Prepare table rows
+    headers = ["Experiment"] + all_dimensions_list + ["Avg Invalid Action Ratio"]
+    rows: List[List[str]] = []
+
+    for base_name in sorted(set(list(grouped.keys()) + list(grouped_invalid.keys()))):
+        row: List[str] = [base_name]
+        for dim in all_dimensions_list:
+            values = grouped.get(base_name, {}).get(dim, [])
+            cell = format_mean_std(compute_mean_std(values)) if values else "-"
+            row.append(cell)
+        # Invalid action ratio aggregation (not percentage) -> treat as raw [0,1], show *100? Original table shows raw ~0.5 so leave raw
+        invalid_stats = compute_mean_std(grouped_invalid.get(base_name, []))
+        row.append(format_mean_std(invalid_stats, percent=False) if invalid_stats else "-")
+        rows.append(row)
+
+    print(f"\n{'='*150}")
+    print(f"Environment: {env_name.upper()} - AGGREGATED SUMMARY (Mean ± Std of Task Success)" )
+    print(f"{'='*150}\n")
+    print(tabulate(rows, headers=headers, tablefmt='pipe'))
+    print()
+
+
 def main():
     """Main function to process and display all results."""
     # Get the running directory
@@ -297,6 +406,13 @@ def main():
 
     for env_name in sorted(results.keys()):
         print_summary_table(env_name, results[env_name], all_experiments)
+
+    # Print aggregated mean ± std tables
+    print("\n" + "=" * 150)
+    print("AGGREGATED SUMMARY TABLES - MEAN ± STD OF TASK SUCCESS")
+    print("=" * 150)
+    for env_name in sorted(results.keys()):
+        print_aggregated_summary_tables(env_name, results[env_name])
 
 
 if __name__ == "__main__":

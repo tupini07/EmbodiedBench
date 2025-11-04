@@ -5,6 +5,7 @@ import os
 import random
 import sys
 import threading
+from typing import Union
 
 import anthropic
 import google.generativeai as genai
@@ -141,6 +142,11 @@ class RemoteModel:
         self.task_type = task_type
 
         self.model: OpenAI | list[OpenAI] | lmdeploy.Pipeline = None  # type: ignore
+        self._model_rotation_index = 0
+
+        if isinstance(remote_url, list):
+            # spread requests for different processes to avoid swamping the same URL all the time.
+            self._model_rotation_index = random.randint(0, len(remote_url) - 1)
 
         if self.model_type == "local":
             backend_config = PytorchEngineConfig(
@@ -575,18 +581,19 @@ class RemoteModel:
                 f"---------------------\nInput to model: \n\n{json.dumps(messages_to_print, indent=2)}\n\n---------------------------------------------------"
             )
 
-        model: OpenAI = self.model if not isinstance(self.model, list) else self.model[
-            random.randint(0, len(self.model) - 1)
-        ]
+        model: Union[OpenAI, list[OpenAI]] = self.model
+        if isinstance(model, list):
+            model = model[self._model_rotation_index % len(model)]
+            self._model_rotation_index += 1
 
         response = model.chat.completions.create(
             model="vllm-model",
             messages=message_history,
-            **({"response_format": response_format} if response_format else {}), # type: ignore
+            **({"response_format": response_format} if response_format else {}),  # type: ignore
             temperature=temperature,
             max_tokens=max_completion_tokens,
             **({"stop": stop_seqs} if stop_seqs else {}),
-        ) # type: ignore
+        )  # type: ignore
 
         out = response.choices[0].message.content
         if os.environ.get("DEBUG_REMOTE_MODEL_OUTPUTS", "0") == "1":

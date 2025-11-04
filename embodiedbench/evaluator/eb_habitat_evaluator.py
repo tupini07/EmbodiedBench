@@ -88,8 +88,24 @@ class EB_HabitatEvaluator():
             done = False
             while not done:
                 try: 
-                    action, reasoning = self.planner.act(img_path, user_instruction)
-                    print(f"Planner Output Action: {action}")
+                    remaining_retries = int(os.getenv("EMB_PLANNER_RETRY_TIMES", "1"))
+                    assert remaining_retries >= 1, "EMB_PLANNER_RETRY_TIMES must be at least 1"
+
+                    action, reasoning = None, None
+                    while remaining_retries > 0:
+                        action, reasoning = self.planner.act(img_path, user_instruction)
+                        remaining_retries -= 1
+
+                        if remaining_retries > 0 and (action == -1 or action == -2):
+                            print(f"Replanning due to invalid or empty plan. Remaining retries: {remaining_retries}")
+                            continue
+                        
+                        break
+
+                    assert action is not None, "Planner action should not be None here"
+                    assert reasoning is not None, "Planner reasoning should not be None here"
+
+                    print(f"[Episode:{self.env._current_episode_num};Step:{self.env._current_step}] Planner Output Action: {action}")
 
                     if action == -2: # empty plan stop here
                         episode_info['empty_plan'] = 1
@@ -126,7 +142,7 @@ class EB_HabitatEvaluator():
                             break
                         continue
                     # multiple actions
-                    if type(action) == list:
+                    if type(action) == list:   
                         for action_single in action[:min(self.env._max_episode_steps - self.env._current_step, len(action))]:
                             obs, reward, done, info = self.env.step(action_single, reasoning=reasoning)
                             action_str = action_single if type(action_single) == str else self.env.language_skill_set[action_single]

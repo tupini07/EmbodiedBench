@@ -55,6 +55,10 @@ def main(cfg: DictConfig) -> None:
         logger.setLevel(logging.DEBUG)
 
     env_name = cfg.env
+    # Expose the environment name for downstream utilities (e.g., plan validator
+    # gating of action name/id repairs). This keeps the planner logic simple and
+    # avoids threading cfg objects through lower-level helpers.
+    os.environ["EB_ENV_NAME"] = str(env_name)
     logger.info(f"Evaluating environment: {env_name}")
     
     with open(f"embodiedbench/configs/{env_name}.yaml", 'r') as f:
