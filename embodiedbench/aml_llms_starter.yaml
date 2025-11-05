@@ -4,8 +4,8 @@ target:
   service: sing
   # name: palisades24
   # name: palisades26
-  # name: palisades27
-  name: msrresrchvc
+  name: palisades27
+  # name: msrresrchvc
   # name: msrresrchbasicvc
   # name: msrresrchlabbasic # <- this is the one that has a bunch of v100s
   workspace_name: atupinirgws
@@ -59,8 +59,8 @@ code:
 search:
   job_template:
     name: EmbodiedBench-eval-{model_config}
-    sku: 1x 80G2-A100
-    # sku: 1x 40G2-A100
+    # sku: 1x 80G2-A100
+    sku: 1x 40G2-A100
     priority: high
     mpi: False
     sla_tier: Premium

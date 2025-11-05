@@ -168,14 +168,15 @@ class VLMPlanner():
                             action = action[:i]
                         break
         except json.JSONDecodeError as e:
-            print("Failed to decode JSON:", e)
+            print("[VLMPlanner#json_to_action] Failed to decode JSON:", e)
             self.output_json_error += 1
             action = -1
         except Exception as e:
             # Catch-all for any other unexpected errors not handled specifically
-            print("An unexpected error occurred:", e)
+            print("[VLMPlanner#json_to_action] An unexpected error occurred:", e)
             self.output_json_error += 1
             action = -1
+
         return action
 
     
@@ -230,20 +231,22 @@ class VLMPlanner():
                 out = self.model.respond(self.episode_messages)
                 time.sleep(15)
             except Exception as e:
-                print("An unexpected error occurred:", e)
+                print("[VLMPlanner#act] An unexpected error occurred:", e)
                 time.sleep(60)
                 out = self.model.respond(self.episode_messages)
         else:
             try: 
                 out = self.model.respond(self.episode_messages)
             except Exception as e:
-                print("An unexpected error occurred:", e)
+                print("[VLMPlanner#act] An unexpected error occurred:", e)
 
                 if self.model_type != 'local':
-                    time.sleep(60)
+                    time.sleep(1)
                 else:
-                    time.sleep(20)
+                    time.sleep(1)
+
                 out = self.model.respond(self.episode_messages)
+
         logger.debug(f"Model Output:\n{out}\n")
         reasoning_mode = os.getenv("EMB_REASONING_MODE", "0") == "1"
         parse_target = out

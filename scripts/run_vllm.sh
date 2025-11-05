@@ -3,19 +3,24 @@
 # Parse command line arguments
 PORT=${1:-43289}
 
-# MODEL_NAME="Qwen2.5-VL-7B-Instruct"
+# Qwen2.5-VL-7B-Instruct
 # MODEL_CHECKPOINT="Qwen/Qwen2.5-VL-7B-Instruct"
 
+# Qwen2.5-VL-7B-Instruct_BASE--rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128
+MODEL_CHECKPOINT="/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/videor1-images-pxmc-verifier-forced-reasoning-glm4.5/rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_15/actor/huggingface/"
 
-# MODEL_NAME="Qwen2.5-VL-7B-Instruct_BASE--aokvqa+videor1"
+# Qwen2.5-VL-7B-Instruct_BASE--cleaned_videos_unprocessed_split1_min_1.0_num_4.9K_videos
+# MODEL_CHECKPOINT="/mnt/reuben_models/projects/reubenprojects/magma-reasoning/sft-model-weights/videor1/sing/cleaned_videos_unprocessed_split1_min_1.0_num_4.9K_videos_pix_3136_262144_bs1_accum8_gpus8_lr1e-5_cosine0.1_epoch3_freeze_vision-true-proj-true-lm-false_model/"
+
+# combined-1-sft_pix_3136_262144_bs1_accum8_gpus8_lr1e-5_cosine0.1_epoch3_freeze_vision-true-proj-true-lm-false_mode
+# MODEL_CHECKPOINT="/mnt/reuben_models/projects/reubenprojects/magma-reasoning/sft-model-weights/combined/sing/combined-1-sft_pix_3136_262144_bs1_accum8_gpus8_lr1e-5_cosine0.1_epoch3_freeze_vision-true-proj-true-lm-false_model/"
+
+# Qwen2.5-VL-7B-Instruct_BASE--aokvqa+videor1
 # MODEL_CHECKPOINT="/mnt/magmathor/training/checkpoints/Qwen2.5-VL-7B-Instruct_BASE__sft__llamafactory_ai2thor_aokvqa+videor1_tag_bs1_accum2_lr1e-5_cosine_0.1_ft_llm_qwen_base_pix_3136_12845056_model_singlenode/checkpoint-436/"
 
 
-# MODEL_NAME="Qwen2.5-VL-7B-Instruct_BASE--magmathor0.1p+aokvqa+videor1"
+# Qwen2.5-VL-7B-Instruct_BASE--magmathor0.1p+aokvqa+videor1
 # MODEL_CHECKPOINT="/mnt/magmathor/training/checkpoints/Qwen2.5-VL-7B-Instruct_BASE__sft__llamafactory_ai2thor_magmathor0.1p+aokvqa+videor1_tag_bs1_accum2_lr1e-5_cosine_0.1_ft_llm_qwen_base_pix_3136_12845056_model_singlenode/checkpoint-700/"
-
-MODEL_NAME="Qwen2.5-VL-7B-Instruct_BASE--cleaned_videos_unprocessed_split1_min_1.0_num_4.9K_videos"
-MODEL_CHECKPOINT="/mnt/reuben_models/projects/reubenprojects/magma-reasoning/sft-model-weights/videor1/sing/cleaned_videos_unprocessed_split1_min_1.0_num_4.9K_videos_pix_3136_262144_bs1_accum8_gpus8_lr1e-5_cosine0.1_epoch3_freeze_vision-true-proj-true-lm-false_model/"
 
 
 echo "Using model: $MODEL_NAME"

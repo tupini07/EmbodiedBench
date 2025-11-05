@@ -9,6 +9,7 @@ from embodiedbench.evaluator.summarize_result import average_json_values
 from embodiedbench.evaluator.evaluator_utils import load_saved_data, update_config_with_args
 from embodiedbench.evaluator.config.system_prompts import alfred_system_prompt
 from embodiedbench.main import logger
+from embodiedbench.utils.duration_logger import DurationLogger
 
 example_path = os.path.join(os.path.dirname(__file__), 'config/alfred_examples.json')
 exploration_example_path = os.path.join(os.path.dirname(__file__), 'config/alfred_long_horizon_examples.json')
@@ -70,6 +71,8 @@ class EB_AlfredEvaluator():
 
     def evaluate(self):
         progress_bar = tqdm(total=self.env.number_of_episodes, desc="Episodes")
+        evaluate_duration_logger = DurationLogger(f"EB_AlfredEvaluator#evaluate")
+
         while self.env._current_episode_num < self.env.number_of_episodes:
             logger.info(f"Evaluating episode {self.env._current_episode_num} ...")
             episode_info = {'reward': [], 'num_invalid_actions': 0, 'empty_plan': 0}
@@ -93,7 +96,9 @@ class EB_AlfredEvaluator():
 
                     action, reasoning = None, None
                     while remaining_retries > 0:
-                        action, reasoning = self.planner.act(img_path, user_instruction)
+                        with evaluate_duration_logger.extend("self.planner.act()"):
+                            action, reasoning = self.planner.act(img_path, user_instruction)
+
                         remaining_retries -= 1
                         if remaining_retries > 0 and (action == -1 or action == -2):
                             print(f"Replanning due to invalid or empty plan. Remaining retries: {remaining_retries}")
@@ -141,7 +146,10 @@ class EB_AlfredEvaluator():
                     # mutiple actions
                     if type(action) == list:
                         for action_single in action[:min(self.env._max_episode_steps - self.env._current_step, len(action))]:
-                            obs, reward, done, info = self.env.step(action_single, reasoning=reasoning)
+                            
+                            with evaluate_duration_logger.extend("self.env.step()"):
+                                obs, reward, done, info = self.env.step(action_single, reasoning=reasoning)
+
                             action_str = action_single if type(action_single) == str else self.env.language_skill_set[action_single]
                             print(f"Executed action: {action_str}, Task success: {info['task_success']}")
                             logger.debug(f"reward: {reward}")
@@ -167,8 +175,8 @@ class EB_AlfredEvaluator():
                         episode_info['num_invalid_actions'] += (info['last_action_success'] == 0)
                 
                 except Exception as e: 
-                    print(e)
-                    time.sleep(30)
+                    print("[EB_AlfredEvaluator#evaluate] An unexpected error occurred:", e)
+                    time.sleep(5)
 
             # evaluation metrics
             episode_info['instruction'] = user_instruction

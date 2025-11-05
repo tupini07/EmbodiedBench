@@ -20,6 +20,8 @@ from azure.identity import (
 from lmdeploy import GenerationConfig, PytorchEngineConfig, pipeline
 from openai import AzureOpenAI, OpenAI
 
+from embodiedbench.utils.duration_logger import DurationLogger
+
 
 # ---------------------------
 # Azure helper functions (used for GPT model rotation)
@@ -68,6 +70,7 @@ def _get_scope():
     return "https://cognitiveservices.azure.com/.default"
 
 
+from embodiedbench.planner.plan_validator import maybe_repair
 from embodiedbench.planner.planner_config.generation_guide import (
     llm_generation_guide,
     vlm_generation_guide,
@@ -76,6 +79,18 @@ from embodiedbench.planner.planner_config.generation_guide_manip import (
     llm_generation_guide_manip,
     vlm_generation_guide_manip,
 )
+from embodiedbench.planner.planner_utils import (
+    extract_box_json,
+)  # legacy first-box extractor (kept for BC)
+from embodiedbench.planner.planner_utils import (
+    extract_first_json_object,
+)  # fallback when no boxing present
+from embodiedbench.planner.planner_utils import (
+    extract_last_box_json,
+)  # new robust final-box extractor
+from embodiedbench.planner.planner_utils import (
+    sanitize_box_payload,
+)  # new sanitation helper
 from embodiedbench.planner.planner_utils import (
     ActionPlan,
     ActionPlan_1,
@@ -87,12 +102,7 @@ from embodiedbench.planner.planner_utils import (
     convert_format_2gemini,
     fix_json,
     reasoning_suffix,
-    extract_box_json,  # legacy first-box extractor (kept for BC)
-    extract_last_box_json,  # new robust final-box extractor
-    sanitize_box_payload,  # new sanitation helper
-    extract_first_json_object,  # fallback when no boxing present
 )
-from embodiedbench.planner.plan_validator import maybe_repair
 
 """Remote model abstraction.
 
@@ -458,7 +468,8 @@ class RemoteModel:
         """
         import random
         import time
-        from openai import RateLimitError, APIError
+
+        from openai import APIError, RateLimitError
 
         initial = float(os.getenv("GPT_INITIAL_BACKOFF", 2))
         maximum = float(os.getenv("GPT_MAX_BACKOFF", 60))
@@ -517,6 +528,8 @@ class RemoteModel:
                 continue
 
     def _call_qwen7b(self, message_history: list):
+        duration_logger = DurationLogger("RemoteModel#_call_qwen7b")
+
         if not self.language_only:
             message_history = convert_format_2gemini(message_history)
 
@@ -586,14 +599,15 @@ class RemoteModel:
             model = model[self._model_rotation_index % len(model)]
             self._model_rotation_index += 1
 
-        response = model.chat.completions.create(
-            model="vllm-model",
-            messages=message_history,
-            **({"response_format": response_format} if response_format else {}),  # type: ignore
-            temperature=temperature,
-            max_tokens=max_completion_tokens,
-            **({"stop": stop_seqs} if stop_seqs else {}),
-        )  # type: ignore
+        with duration_logger.extend("model inference"):
+            response = model.chat.completions.create(
+                model="vllm-model",
+                messages=message_history,
+                **({"response_format": response_format} if response_format else {}),  # type: ignore
+                temperature=temperature,
+                max_tokens=max_completion_tokens,
+                **({"stop": stop_seqs} if stop_seqs else {}),
+            )  # type: ignore
 
         out = response.choices[0].message.content
         if os.environ.get("DEBUG_REMOTE_MODEL_OUTPUTS", "0") == "1":
@@ -601,21 +615,37 @@ class RemoteModel:
                 f"---------------------------------------------------\nRaw output from model: \n\n{out}\n\n---------------------------------------------------"
             )
 
+        parsing_duration_logger = duration_logger.extend("parsing")
+        parsing_duration_logger.start()
+
         if reasoning_mode:
             # Robust boxed JSON extraction strategy:
             # 1. Prefer the LAST boxed region (model may self-correct producing multiple boxes)
             # 2. Fallback to first boxed region (legacy behavior)
             # 3. Fallback to scanning entire output for first JSON object
-            box_json = extract_last_box_json(out) or extract_box_json(out)
-            candidate = sanitize_box_payload(box_json) if box_json else None
+
+            with parsing_duration_logger.extend(
+                "extract_last_box_json(out) or extract_box_json(out)"
+            ):
+                box_json = extract_last_box_json(out) or extract_box_json(out)
+
+            candidate = None
+
+            if box_json:
+                with parsing_duration_logger.extend("sanitize_box_payload(box_json)"):
+                    candidate = sanitize_box_payload(box_json)
 
             if not candidate:
                 # No boxed payload at all – attempt raw scan for a JSON object in full output
-                fallback_obj = extract_first_json_object(out)
-                candidate = fallback_obj if fallback_obj else None
+                with parsing_duration_logger.extend(
+                    "fallback[extract_first_json_object(out)]"
+                ):
+                    fallback_obj = extract_first_json_object(out)
+                    candidate = fallback_obj if fallback_obj else None
 
             if candidate:
-                out = fix_json(candidate)
+                with parsing_duration_logger.extend("fix_json"):
+                    out = fix_json(candidate)
             else:
                 # Leave `out` unchanged; downstream maybe_repair will fail parse and log.
                 pass
@@ -623,12 +653,15 @@ class RemoteModel:
         # Always attempt plan validation / repair unless explicitly disabled.
         # Controlled by PLAN_REPAIR_MODE env (off|log|apply). Default 'apply'.
         try:
-            out = maybe_repair(out)
+            with parsing_duration_logger.extend("maybe_repair"):
+                out = maybe_repair(out)
         except Exception as e:
             # Fail-safe: never crash the call; log and return original.
             import logging as _logging
 
             _logging.warning(f"plan repair failed: {e}")
+
+        parsing_duration_logger.stop()
 
         if os.environ.get("DEBUG_REMOTE_MODEL_OUTPUTS", "0") == "1":
             is_json_parseable = False

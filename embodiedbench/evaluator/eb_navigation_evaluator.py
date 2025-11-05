@@ -14,6 +14,7 @@ from time import sleep
 from embodiedbench.evaluator.config.system_prompts import eb_navigation_system_prompt
 from embodiedbench.evaluator.config.eb_navigation_example import examples
 from embodiedbench.main import logger
+from embodiedbench.utils.duration_logger import DurationLogger
 
 system_prompt = eb_navigation_system_prompt
 examples = examples
@@ -70,6 +71,8 @@ class EB_NavigationEvaluator():
 
     def evaluate(self):
         progress_bar = tqdm(total=self.env.number_of_episodes, desc="Episodes")
+        evaluate_duration_logger = DurationLogger(f"EB_NavigationEvaluator#evaluate")
+
         while self.env._current_episode_num < self.env.number_of_episodes:
             logger.info(f"Evaluating episode {self.env._current_episode_num} ...")
             episode_info = {'reward': []}
@@ -86,9 +89,10 @@ class EB_NavigationEvaluator():
 
                     action, reasoning = None, None
                     while remaining_retries > 0:
-                        action, reasoning, valid = self.planner.act(img_path, user_instruction)
-                        remaining_retries -= 1
+                        with evaluate_duration_logger.extend("self.planner.act()"):
+                            action, reasoning, valid = self.planner.act(img_path, user_instruction)
 
+                        remaining_retries -= 1
                         if remaining_retries > 0 and not valid:
                             print(f"Replanning due to invalid or empty plan. Remaining retries: {remaining_retries}")
                             continue
@@ -103,10 +107,13 @@ class EB_NavigationEvaluator():
                     reasoning = json.loads(reasoning)
                     if type(action) == list:
                         for i, action_single in enumerate( action[:min(self.env._max_episode_steps - self.env._current_step + 1, len(action))] ):
-                            if i==0:
-                                obs, reward, done, info = self.env.step(action_single,reasoning,1)
-                            else:
-                                obs, reward, done, info = self.env.step(action_single,reasoning,0)
+                            
+                            with evaluate_duration_logger.extend("self.env.step()"):
+                                if i==0:
+                                    obs, reward, done, info = self.env.step(action_single,reasoning,1)
+                                else:
+                                    obs, reward, done, info = self.env.step(action_single,reasoning,0)
+
                             print(f"Executed action: {action_single}, Task success: {info['task_success']}")
                             logger.debug(f"reward: {reward}")
                             logger.debug(f"terminate: {done}\n")

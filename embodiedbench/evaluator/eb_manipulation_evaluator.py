@@ -11,6 +11,7 @@ from embodiedbench.envs.eb_manipulation.eb_man_utils import form_object_coord_fo
 from embodiedbench.planner.manip_planner import ManipPlanner
 from embodiedbench.evaluator.config.eb_manipulation_example import vlm_examples_baseline, llm_examples, vlm_examples_ablation
 from embodiedbench.main import logger
+from embodiedbench.utils.duration_logger import DurationLogger
 
 class EB_ManipulationEvaluator():
     def __init__(self, config):
@@ -98,6 +99,8 @@ class EB_ManipulationEvaluator():
 
     def evaluate(self):
         progress_bar = tqdm(total=self.env.number_of_episodes, desc="Episodes")
+        evaluate_duration_logger = DurationLogger(f"EB_ManipulationEvaluator#evaluate")
+
         while self.env._current_episode_num < self.env.number_of_episodes:
             logger.info(f"Evaluating episode {self.env._current_episode_num} ...")
             episode_info = {'reward': [], 'action_success': []}
@@ -131,10 +134,12 @@ class EB_ManipulationEvaluator():
 
                 action, reasoning = None, None
                 while remaining_retries > 0:
-                    if self.config['multistep']:
-                        action, reasoning, valid = self.planner.act(image_history, user_instruction, str(avg_obj_coord), self.env.current_task_variation)
-                    else:
-                        action, reasoning, valid = self.planner.act(img_path_list, user_instruction, str(avg_obj_coord), self.env.current_task_variation)
+
+                    with evaluate_duration_logger.extend("self.planner.act()"):
+                        if self.config['multistep']:
+                            action, reasoning, valid = self.planner.act(image_history, user_instruction, str(avg_obj_coord), self.env.current_task_variation)
+                        else:
+                            action, reasoning, valid = self.planner.act(img_path_list, user_instruction, str(avg_obj_coord), self.env.current_task_variation)
 
                     remaining_retries -= 1
                     if remaining_retries > 0 and not valid:
@@ -152,7 +157,10 @@ class EB_ManipulationEvaluator():
                     break
                 else:
                     for action_single in action[:min(self.env._max_episode_steps - self.env._current_step, len(action))]:
-                        obs, reward, done, info = self.env.step(action_single)
+                        
+                        with evaluate_duration_logger.extend("self.env.step()"):
+                            obs, reward, done, info = self.env.step(action_single)
+                        
                         print(f"Executed action: {action_single}, Task success: {info['task_success']}")
                         logger.debug(f"reward: {reward}")
                         logger.debug(f"terminate: {done}\n")

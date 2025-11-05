@@ -14,6 +14,7 @@ let extra_env = {
     ONLY_ONE_STEP_PLAN: "1"    
     EMB_PLANNER_RETRY_TIMES: "3"
     EMB_REASONING_MODE: "1"
+	EB_SUPRESS_DURATION_LOGS: "0"
     REMOTE_URL: "http://localhost:43001/v1,http://localhost:43002/v1,http://localhost:43003/v1"
 }
 

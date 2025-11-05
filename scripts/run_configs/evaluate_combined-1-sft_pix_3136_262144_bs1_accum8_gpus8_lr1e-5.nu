@@ -1,13 +1,13 @@
 #!/usr/bin/env nu
 
 # Evaluation script using shared `run_batch` helper.
-# Configuration: temps [0.0,0.6]; max_tokens [2048,4096]; replicates 3.
-# Debug env: inputs=1 outputs=1.
+# Configuration: temps [0.6]; max_tokens [4000,6000]; replicates 3.
+# Debug env: inputs=0 outputs=1.
 
 use _common.nu *
 
 let temps = [0.6]
-let max_tokens_list = [4096]
+let max_tokens_list = [6192]
 
 let extra_env = { 
     DEBUG_REMOTE_MODEL_INPUTS: "0"
@@ -16,7 +16,7 @@ let extra_env = {
     EMB_PLANNER_RETRY_TIMES: "3"
     EMB_REASONING_MODE: "1"
 	EB_SUPRESS_DURATION_LOGS: "0"
-    REMOTE_URL: "http://localhost:43291/v1"
+    REMOTE_URL: "http://localhost:44001/v1,http://localhost:44002/v1,http://localhost:44003/v1"
 }
 
 ## To disable interactive pauses, add --no_pause to the run_batch call line.
@@ -26,7 +26,7 @@ let result = (
 	$max_tokens_list    # max token sizes
 	$extra_env          # extra environment variables
 	--stop_seqs "</answer>"
-	--prefix "Qwen2.5-7b_NewJsonParsing_ActionCorrection_OneStepPlan_3Retries_WithReasoning_"
+	--prefix "combined-1-sft_pix_3136_262144_bs1_accum8_gpus8_lr1e-5_ActionCorrection_OneStepPlanLoose_3Retries_WithReasoning_"
 	# --no_pause        # uncomment to skip interactive prompts
 )
 
