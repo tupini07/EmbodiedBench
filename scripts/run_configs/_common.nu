@@ -89,124 +89,198 @@ export def run_batch [
         RUN_ALFRED: "1"                         # whether to run EB-ALFRED evaluations
         RUN_HABITAT: "1"                        # whether to run EB-Habitat
     },  
+    --amlt_job_names:list<string> = [],
     --replicates:int = 3,
     --no_pause = false,        # boolean switch default
     --stop_seqs:string = "</answer>",
     --prefix:string = "",      # optional prefix for run_name; also used for filtering jobs in polling/cleanup
     --skip_if_done = true       # by default, don't spawn job if dones file has ALL DONE
 ] {
-    mkdir logs | ignore
-    mkdir running/dones | ignore
-    
-    let spawned_jobs_ids: list<int> = $temps | each { |temp|
-        $max_tokens_list | each { |max_tokens|
-            print $"Configured to run with temperature=($temp) and max_tokens=($max_tokens)"
-
-            (seq 1 $replicates) | each { |rep|
-                let base_name = $"temp($temp)_maxTokens($max_tokens)_rep($rep)"
-                let run_name = if $prefix == "" { $base_name } else { $"($prefix)($base_name)" }
-
-                let merged_env = {
-                    REMOTE_MODEL_TEMPERATURE: $temp
-                    REMOTE_MODEL_MAX_TOKENS: $max_tokens
-                    REMOTE_MODEL_STOP_SEQS: $stop_seqs
-                    SKIP_IF_DONE: (if $skip_if_done { "1" } else { "0" })
-                    FORCE_RERUN: "0"
-                } | merge $extra_env
-
-                if $skip_if_done {
-                    let dones_path = $"running/dones/($run_name)_dones.txt"
-
-                    let dones_exists = (ls running/dones | where name == $"($run_name)_dones.txt" | length) > 0
-                    # Only skip if prior marker indicates all sets succeeded (ALL DONE OK)
-                    let contains_done = (if $dones_exists { (try { open $dones_path | str contains "ALL DONE OK" } catch { false }) } else { false })
-
-                    let has_done = $dones_exists and $contains_done
-                    if $has_done {
-                        let msg = ("[SKIP] Completed run detected for run_name=" + $run_name)
-                        print $msg
-                        return null
-                    }
-                }
-
-                let jobid = job spawn {
-                    with-env $merged_env {
-                        run_basic_evals $run_name
-
-                        $"DONE ($run_name)" | job send 0
-                    }
-                }
-
-                print $"Started job \(rep ($rep)/($replicates)\) for temperature ($temp) and max tokens ($max_tokens) with Job ID: ($jobid)"
-
-                if $no_pause {
-                    sleep 20sec
-                } else { 
-                    try {
-                        sleep 10sec
-
-                        print ""
-                        input $"(ansi purple_italic)Press Enter to launch the next replicate \(or Ctrl+C to stop)...(ansi reset)" 
-                        print ""
-                    } catch {
-                        print "Interrupted by user during pause. Cleaning up spawned jobs..."
-                        print "Currently running jobs:"
-                        job list
-                        job list | each { |j| 
-                            print $"Killing job ID: ($j.id)"
-                            job kill $j.id
-                        }
-
-                        kill-all $prefix
-                        exit 1
-                    }
-                }
-
-                $jobid
-            } | flatten
-        } | flatten
-    } | flatten | where $it != null
-
     try {
-        print "All jobs submitted. Polling for completion..."
-        sleep 10sec  # brief pause before polling
+        mkdir logs | ignore
+        mkdir running/dones | ignore
 
-        print "Spawned jobs after initial wait"
-        job list
+        let main_job_id = job id
+        
+        let spawned_jobs_ids: list<int> = $temps | each { |temp|
+            $max_tokens_list | each { |max_tokens|
+                print $"Configured to run with temperature=($temp) and max_tokens=($max_tokens)"
 
-        input $"(ansi yellow_bold)[Manual-Gate] Press Enter to start to automatically monitor job completion \(or Ctrl+C to stop)...(ansi reset)" 
+                (seq 1 $replicates) | each { |rep|
+                    let base_name = $"temp($temp)_maxTokens($max_tokens)_rep($rep)"
+                    let run_name = if $prefix == "" { $base_name } else { $"($prefix)($base_name)" }
 
-        # monitor ids
-        print --no-newline "Starting job monitoring"
-        loop {
-            if (job list | length) == 0 {
-                break
+                    let merged_env = {
+                        REMOTE_MODEL_TEMPERATURE: $temp
+                        REMOTE_MODEL_MAX_TOKENS: $max_tokens
+                        REMOTE_MODEL_STOP_SEQS: $stop_seqs
+                        SKIP_IF_DONE: (if $skip_if_done { "1" } else { "0" })
+                        FORCE_RERUN: "0"
+                    } | merge $extra_env
+
+                    if $skip_if_done {
+                        let dones_path = $"running/dones/($run_name)_dones.txt"
+
+                        let dones_exists = (ls running/dones | where name == $"($run_name)_dones.txt" | length) > 0
+                        # Only skip if prior marker indicates all sets succeeded (ALL DONE OK)
+                        let contains_done = (if $dones_exists { (try { open $dones_path | str contains "ALL DONE OK" } catch { false }) } else { false })
+
+                        let has_done = $dones_exists and $contains_done
+                        if $has_done {
+                            let msg = ("[SKIP] Completed run detected for run_name=" + $run_name)
+                            print $msg
+                            return null
+                        }
+                    }
+
+                    let jobid = job spawn {
+                        with-env $merged_env {
+                            run_basic_evals $run_name $main_job_id
+                        }
+                    }
+
+                    print $"Started job \(rep ($rep)/($replicates)\) for temperature ($temp) and max tokens ($max_tokens) with Job ID: ($jobid)"
+
+                    if $no_pause {
+                        sleep 20sec
+                    } else { 
+                        try {
+                            sleep 10sec
+
+                            print ""
+                            input $"(ansi purple_italic)Press Enter to launch the next replicate \(or Ctrl+C to stop)...(ansi reset)" 
+                            print ""
+                        } catch {
+                            print "Interrupted by user during pause. Cleaning up spawned jobs..."
+                            print "Currently running jobs:"
+                            job list
+                            job list | each { |j| 
+                                print $"Killing job ID: ($j.id)"
+                                job kill $j.id
+                            }
+
+                            kill-all-regex $prefix
+                            exit 1
+                        }
+                    }
+
+                    $jobid
+                } | flatten
+            } | flatten
+        } | flatten | where $it != null
+
+        try {
+            print "All jobs submitted. Polling for completion..."
+            sleep 10sec  # brief pause before polling
+
+            print "Spawned jobs after initial wait"
+            job list
+
+            # Structured monitoring of completion messages from run_basic_evals
+            print "Starting structured job monitoring (waiting for completion messages)"
+            mut completed_runs: list<string> = []
+            mut statuses: list<record> = []
+            let expected_jobs = ($spawned_jobs_ids | length)
+
+            mut n_success = 0
+            mut n_failure = 0
+
+            loop {
+                if (($completed_runs | length) >= $expected_jobs) { break }
+
+                let msg = (try { job recv } catch { null })
+                if $msg != null {
+                    match $msg {
+                        {kind: 'exp', exp_name: $ename, status: $st} => {
+                            let succ: int = ($msg.successes? | default 0)
+                            let fail: int = ($msg.failures? | default 0)
+
+                            $n_success += $succ
+                            $n_failure += $fail
+
+                            if not ($completed_runs | any {|x| $x == $ename}) {
+                                $completed_runs = ($completed_runs ++ [$ename])
+                            }
+                            $statuses = ($statuses ++ [$msg])
+                            print $"[MONITOR] exp_name=($ename) status=($st) successes=($succ) failures=($fail) progress=($completed_runs | length)/($expected_jobs)"
+                        },
+                        _ => { print $"[MONITOR][WARN] Unexpected mailbox message: ($msg)" }
+                    }
+                }
             }
 
-            print --no-newline "."
-            sleep 20sec
-        }
+            print "================ Batch Summary ================"
+            for s in $statuses {
+                let succ = ($s.successes? | default null)
+                let fail = ($s.failures? | default null)
+                print $"Run: ($s.exp_name) Status: ($s.status) Successes: ($succ) Failures: ($fail)"
+            }
+            let success_count = ($statuses | where status == 'success' | length)
+            let failure_count = ($statuses | where status == 'failure' | length)
+            let skipped_count = ($statuses | where status == 'skipped' | length)
+            let aborted_count = ($statuses | where status == 'aborted' | length)
+            print $"Totals -> success: ($success_count), failure: ($failure_count), skipped: ($skipped_count), aborted: ($aborted_count)"
+            print "=========================================================="
 
-    } catch { |err|
-        print "Error occurred during job submission"
-        print $"Error details: ($err)"
-        
-        $spawned_jobs_ids | each { |jid| 
-            print $"Cleaning up job ID: ($jid)"
-            job kill $jid
-        }
+            # if no failures then offer to stop amulet jobs
+            if ($n_failure == 0 and ($amlt_job_names | length) > 0) {
+                let answer = input $"(ansi green_bold)All jobs completed successfully with zero failures. Do you want me to stop the Amulet jobs? \(y/[n])(ansi reset)"
+                if $answer == "y" or $answer == "Y" {
+                    for job_name in $amlt_job_names {
+                        print $"Stopping Amulet job: ($job_name)"
+                        bash -c $'amlt cancel ":($job_name)"'
+                    }
+                    print $"(ansi green_bold)Amulet jobs stopped.(ansi reset)"
+                } else {
+                    print $"(ansi yellow_bold)Amulet jobs left running as per user choice.(ansi reset)"
+                }
+            }
 
-        kill-all $prefix
-        exit 1
+
+        } catch { |err|
+            print "Error occurred during job submission"
+            print $"Error details: ($err)"
+            
+            $spawned_jobs_ids | each { |jid| 
+                print $"Cleaning up job ID: ($jid)"
+                job kill $jid
+            }
+
+            kill-all-regex $prefix
+            exit 1
+        }
+    } catch {
+        # Fallback error handler: attempt regex-based termination of stray processes using the provided prefix
+        print "Error during run_batch execution. Attempting regex-based cleanup with prefix pattern."
+        kill-all-regex $prefix
     }
 }
 
-def kill-all [filter: string] {
-    print $"(ansi red_bold)Killing all jobs matching filter: '($filter)' (ansi reset)"
-    bash -c $'ps a | grep -v "grep" | grep "($filter)" | cut -f1 -d" " | xargs -I {} kill -9 {}'
+# Regex-based killer that matches the FULL command line (using ps -eo pid,command) against a user-provided regex.
+# Safer than killall with partial names; ignores empty pattern and self process.
+def kill-all-regex [pattern: string] {
+    if ($pattern | str length) == 0 {
+        print "[kill-all-regex] Empty pattern provided; nothing to kill."
+        return
+    }
+    print $"(ansi red_bold)[kill-all-regex] Killing processes whose command matches regex: /($pattern)/ (ansi reset)"
+    let script = $"ps -eo pid,command | grep -E '($pattern)' | grep -v grep | awk '{print $1}'"
+    let pids = (bash -c $script | lines | where $it != "")
+    if ($pids | length) == 0 {
+        print "[kill-all-regex] No matching processes found."
+        return
+    }
+    for p in $pids {
+        if ($p | into int) == (pid) { continue }
+        print $"[kill-all-regex] kill -9 ($p)"
+        try { bash -c $"kill -9 ($p)" } catch { print $"[kill-all-regex][WARN] Failed to kill pid ($p)" }
+    }
 }
 
-def run_basic_evals [exp_name: string] {
+def run_basic_evals [
+    exp_name: string, 
+    main_job_id: int
+] {
     # rather than call into bash, implement everything in nu
     let remote_url = $env.REMOTE_URL? | default 'http://localhost:43289/v1'
     with-env {
@@ -239,6 +313,7 @@ def run_basic_evals [exp_name: string] {
                 $prior_has_all_done
             ) {
                 print $"[SKIP] Completed run detected via ($prior_done_file) \(contains ALL DONE OK). Skipping execution."
+                {kind: 'exp', exp_name: $exp_name, status: 'skipped'} | job send $main_job_id
                 return
             }
         }
@@ -558,9 +633,13 @@ def run_basic_evals [exp_name: string] {
             if ($failures == 0) and ($successes == $total_envs) {
                 $"ALL DONE OK successes=($successes) failures=($failures)" | save --append $prior_done_file
                 print $"All evaluations completed SUCCESSFULLY. Successes=($successes) Failures=($failures) (markers written to: ($prior_done_file))"
+                # send success completion to supervising batch job
+                {kind: 'exp', exp_name: $exp_name, status: 'success', successes: $successes, failures: $failures} | job send $main_job_id
             } else {
                 $"ALL DONE WITH FAILURES successes=($successes) failures=($failures)" | save --append $prior_done_file
                 print $"Evaluations finished with FAILURES. Successes=($successes) Failures=($failures). Run will NOT be skipped next time. (markers written to: ($prior_done_file))"
+                # send failure completion to supervising batch job
+                {kind: 'exp', exp_name: $exp_name, status: 'failure', successes: $successes, failures: $failures} | job send $main_job_id
             }
         } catch { |err|
             print "Interrupted while waiting for evaluations to complete (likely Ctrl-C). Cleaning up related jobs..."
@@ -572,6 +651,7 @@ def run_basic_evals [exp_name: string] {
             for jid in $habitat_job_ids_snapshot { try { job kill $jid } }
             # try { job kill $manipulation_job_id }
             # try { job kill $navigation_job_id }
+            {kind: 'exp', exp_name: $exp_name, status: 'aborted'} | job send $main_job_id
         }
     }
 }

@@ -12,11 +12,13 @@ import math
 import os
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from tabulate import tabulate
 import re
 import statistics
+
+import pandas as pd
 
 
 def load_summary_json(file_path: Path) -> Dict[str, Any]:
@@ -286,68 +288,140 @@ def format_mean_std(pairs: Optional[tuple], percent: bool = True) -> str:
 
 
 def print_aggregated_summary_tables(env_name: str, experiments_data: Dict[str, Dict[str, Path]]):
-    """Print aggregated summary table: groups repetitions and shows mean ± std for task_success per dimension and invalid action ratio.
+    """Reworked aggregated summary tables.
 
-        Strategy:
-            1. Derive base experiment names (strip _repX)
-            2. For each base experiment & dimension collect task_success values
-            3. Also collect num_invalid_action_ratio per dimension then average per repetition, then aggregate those averages across repetitions.
-                 (Alternatively average over all dimension ratios per repetition then aggregate; we mirror existing summary which averages across dimensions.)
-    We will mimic existing summary's average invalid action ratio: for each repetition (exp name with rep suffix) we compute the average of available dimension ratios; then we aggregate across reps for same base.
+    New logic:
+      1. Build a flat record list of (experiment, cleaned_group, repetition, dimension, task_success, invalid_ratio).
+    2. Cleaned group name strips the common leading model prefix and trailing _rep<digits> using regex:
+        ^(?:Qwen2\\.5-VL-7B-Instruct_)|_rep\\d+$
+         (Designed per user instruction; applies sequentially to remove prefix and repetition suffix.)
+      3. For each repetition (original experiment name) compute its average invalid ratio across available dimensions.
+      4. Aggregate across repetitions within the same cleaned group: for each dimension compute mean ± std of task_success; for invalid ratio compute mean ± std of the per-repetition averages.
+      5. Format task_success as percentage (mean*100 with 2 decimals for mean and std) and invalid ratio as raw value with 3 decimals.
+
+    If pandas is available we use it for clearer grouping; otherwise we fall back to pure-python collections.
     """
-    # Collect dimensions across this environment
-    all_dimensions_set: Set[str] = set()
+
+    # Collect all dimensions for column ordering
+    all_dimensions: Set[str] = set()
     for dims in experiments_data.values():
-        all_dimensions_set.update(dims.keys())
-    all_dimensions_list = sorted(all_dimensions_set)
-    if not all_dimensions_list:
+        all_dimensions.update(dims.keys())
+    dimensions_sorted = sorted(all_dimensions)
+    if not dimensions_sorted:
         return
 
-    # Map: base_name -> dimension -> list of task_success values
-    grouped: Dict[str, Dict[str, List[float]]] = defaultdict(lambda: defaultdict(list))
-    # Map: base_name -> list of avg invalid action ratio per repetition
-    grouped_invalid: Dict[str, List[float]] = defaultdict(list)
+    # Regex for cleaning experiment identifiers
+    # Use raw string to avoid invalid escape sequence warnings.
+    clean_pattern = re.compile(r'^(?:Qwen2\.5-VL-7B-Instruct_)|_rep\d+$')
 
-    # Temporary: base_name -> rep_id -> list of invalid ratios to compute per-rep average
-    per_rep_invalid: Dict[str, Dict[str, List[float]]] = defaultdict(lambda: defaultdict(list))
+    def clean_experiment(exp: str) -> str:
+        return clean_pattern.sub('', exp)
 
+    # Build flat records
+    records: List[Dict[str, Any]] = []
     for exp_name, dims in experiments_data.items():
-        base_name = base_experiment_name(exp_name)
-        rep_match = re.search(r"(_rep\d+)$", exp_name)
-        rep_id = rep_match.group(1) if rep_match else "_rep0"  # default single rep
-        invalid_values_this_rep: List[float] = []
+        cleaned = clean_experiment(exp_name)
+        rep_match = re.search(r'(_rep\d+)$', exp_name)
+        rep_id = rep_match.group(1) if rep_match else '_rep0'
         for dimension, path in dims.items():
             data = load_summary_json(path)
-            ts = data.get("task_success")
-            if isinstance(ts, (int, float)) and not (isinstance(ts, float) and math.isnan(ts)):
-                grouped[base_name][dimension].append(float(ts))
-            invalid_ratio = data.get("num_invalid_action_ratio")
-            if isinstance(invalid_ratio, (int, float)) and not (isinstance(invalid_ratio, float) and math.isnan(invalid_ratio)):
-                per_rep_invalid[base_name][rep_id].append(float(invalid_ratio))
+            ts = data.get('task_success')
+            invalid_ratio = data.get('num_invalid_action_ratio')
+            records.append({
+                'Experiment': exp_name,
+                'Group': cleaned,
+                'Repetition': rep_id,
+                'Dimension': dimension,
+                'task_success': ts if isinstance(ts, (int, float)) and not (isinstance(ts, float) and math.isnan(ts)) else None,
+                'num_invalid_action_ratio': invalid_ratio if isinstance(invalid_ratio, (int, float)) and not (isinstance(invalid_ratio, float) and math.isnan(invalid_ratio)) else None,
+            })
 
-    # Compute per-rep average invalid ratios then aggregate
-    for base_name, rep_dict in per_rep_invalid.items():
-        for rep_id, ratios in rep_dict.items():
-            if ratios:
-                grouped_invalid[base_name].append(sum(ratios)/len(ratios))
+    if not records:
+        return
 
-    # Prepare table rows
-    headers = ["Experiment"] + all_dimensions_list + ["Avg Invalid Action Ratio"]
+    headers = ["Experiment"] + dimensions_sorted + ["Avg Invalid Action Ratio"]
     rows: List[List[str]] = []
 
-    for base_name in sorted(set(list(grouped.keys()) + list(grouped_invalid.keys()))):
-        row: List[str] = [base_name]
-        for dim in all_dimensions_list:
-            values = grouped.get(base_name, {}).get(dim, [])
-            cell = format_mean_std(compute_mean_std(values)) if values else "-"
-            row.append(cell)
-        # Invalid action ratio aggregation (not percentage) -> treat as raw [0,1], show *100? Original table shows raw ~0.5 so leave raw
-        invalid_stats = compute_mean_std(grouped_invalid.get(base_name, []))
-        row.append(format_mean_std(invalid_stats, percent=False) if invalid_stats else "-")
-        rows.append(row)
+    # Expected number of repetitions per experiment group
+    EXPECTED_REPS = 3
+
+    # Helper to pluralize missing item message
+    def missing_msg(n: int) -> str:
+        return f"{n} item missing" if n == 1 else f"{n} items missing"
+
+    # Pandas path
+    # pandas is available in this branch; assert for type checkers
+    assert pd is not None
+    df = pd.DataFrame(records)  # type: ignore[attr-defined]
+
+    # Task success aggregation including count of valid repetitions
+    ts_stats_df = (
+        df.groupby(['Group', 'Dimension'])['task_success']
+            .agg(['count', 'mean', 'std'])
+            .reset_index()
+    )
+    # Fix std for single value
+    ts_stats_df['std'] = ts_stats_df.apply(
+        lambda r: 0.0 if r['count'] == 1 or math.isnan(r['std']) else r['std'], axis=1
+    )
+    ts_stats: Dict[Tuple[str, str], Tuple[int, float, float]] = {
+        (row.Group, row.Dimension): (int(row['count']), float(row['mean']), float(row['std']))
+        for _, row in ts_stats_df.iterrows() if not math.isnan(row['mean'])
+    }
+
+    # Invalid action ratio per repetition (average across its dimensions)
+    rep_invalid = (
+        df.dropna(subset=['num_invalid_action_ratio'])
+            .groupby(['Group', 'Repetition'])['num_invalid_action_ratio']
+            .mean()
+            .reset_index()
+    )
+    # Aggregate invalid ratio across repetitions
+    invalid_stats_df = (
+        rep_invalid.groupby('Group')['num_invalid_action_ratio']
+                    .agg(['count', 'mean', 'std'])
+                    .reset_index()
+    )
+    invalid_stats_df['std'] = invalid_stats_df.apply(
+        lambda r: 0.0 if r['count'] == 1 or math.isnan(r['std']) else r['std'], axis=1
+    )
+    invalid_stats: Dict[str, Tuple[int, float, float]] = {
+        row['Group']: (int(row['count']), float(row['mean']), float(row['std']))
+        for _, row in invalid_stats_df.iterrows() if not math.isnan(row['mean'])
+    }
+
+    groups = sorted(df['Group'].unique())
+    for group in groups:
+        row_cells: List[str] = [group]
+        for dim in dimensions_sorted:
+            key = (group, dim)
+            if key in ts_stats:
+                count_valid, mean, std = ts_stats[key]
+                missing = EXPECTED_REPS - count_valid
+                if count_valid == 0:
+                    row_cells.append('no data')
+                elif missing > 0:
+                    row_cells.append(missing_msg(missing))
+                else:
+                    row_cells.append(f"{mean*100:.2f}% ± {std*100:.2f}%")
+            else:
+                # Entire dimension absent for this group
+                row_cells.append(missing_msg(EXPECTED_REPS))
+        if group in invalid_stats:
+            inv_count, inv_mean, inv_std = invalid_stats[group]
+            inv_missing = EXPECTED_REPS - inv_count
+            if inv_count == 0:
+                row_cells.append('no data')
+            elif inv_missing > 0:
+                row_cells.append(missing_msg(inv_missing))
+            else:
+                row_cells.append(f"{inv_mean:.3f} ± {inv_std:.3f}")
+        else:
+            row_cells.append(missing_msg(EXPECTED_REPS))
+        rows.append(row_cells)
 
     print(f"\n{'='*150}")
-    print(f"Environment: {env_name.upper()} - AGGREGATED SUMMARY (Mean ± Std of Task Success)" )
+    print(f"Environment: {env_name.upper()} - AGGREGATED SUMMARY (Reworked Mean ± Std of Task Success)" )
     print(f"{'='*150}\n")
     print(tabulate(rows, headers=headers, tablefmt='pipe'))
     print()
@@ -378,21 +452,21 @@ def main():
         num_experiments = len(results[env_name])
         print(f"  - {env_name}: {num_experiments} experiment(s)")
 
-    # Print detailed tables for each environment
-    print("\n" + "=" * 150)
-    print("DETAILED TABLES BY DIMENSION")
-    print("=" * 150)
+    # # Print detailed tables for each environment
+    # print("\n" + "=" * 150)
+    # print("DETAILED TABLES BY DIMENSION")
+    # print("=" * 150)
 
-    for env_name in sorted(results.keys()):
-        print_environment_table(env_name, results[env_name])
+    # for env_name in sorted(results.keys()):
+    #     print_environment_table(env_name, results[env_name])
 
-    # Print compact tables
-    print("\n" + "=" * 150)
-    print("COMPACT TABLES - KEY METRICS")
-    print("=" * 150)
+    # # Print compact tables
+    # print("\n" + "=" * 150)
+    # print("COMPACT TABLES - KEY METRICS")
+    # print("=" * 150)
 
-    for env_name in sorted(results.keys()):
-        print_compact_table(env_name, results[env_name])
+    # for env_name in sorted(results.keys()):
+    #     print_compact_table(env_name, results[env_name])
 
     # Print summary tables (task_success with average invalid action ratio)
     print("\n" + "=" * 150)

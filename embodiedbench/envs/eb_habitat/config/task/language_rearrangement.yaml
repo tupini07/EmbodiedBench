@@ -51,6 +51,7 @@ habitat:
       enable_hbao: False
       enable_physics: True
       enable_gfx_replay_save: False
+      gpu_device_id: -1
 
   task:
     type: "RearrangePredicateTask-v0"
