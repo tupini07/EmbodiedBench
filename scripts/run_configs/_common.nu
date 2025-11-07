@@ -1,5 +1,80 @@
 #!/usr/bin/env nu
 
+export def start_ssh_tunnels  [
+    amlt_job_names: list<string>,
+    remote_urls: string
+] {
+    # amlt ssh "fair-bobcat" -o "StrictHostKeyChecking=no" -o "-4 -L 43003:localhost:43289"
+    let local_ports = ($remote_urls | split row ',' | each { |url| 
+        let parts = $url | split row ':'
+        let port_part = ($parts | last)
+        let port = ($port_part | split row '/' | first)
+        $port
+    })
+
+    # there should be as many local_ports as amlt_job_names
+    if ($local_ports | length) != ($amlt_job_names | length) {
+        print $"(ansi red_bold)Error: Number of local ports (\($local_ports | length)) does not match number of AMLT job names (\($amlt_job_names | length)). Cannot start SSH tunnels.(ansi reset)"
+        exit 1
+    }
+
+    # first, check all ports
+    mut is_any_port_used = false
+    for local_port in $local_ports {
+        # --- Port availability check ---------------------------------------
+        # We treat any existing LISTEN socket on the target port as an error to avoid
+        # silently reusing an already-bound forward (or conflicting local service).
+        # lsof output: header line + one or more rows if port is in use.
+        let lsof_output = (bash -c $"lsof -iTCP:($local_port) -sTCP:LISTEN -Pn" | lines)
+        let port_in_use = ($lsof_output | length) > 1
+        if $port_in_use {
+            print $"(ansi red_bold)Error: local port ($local_port) already in use.\nRefusing to start SSH tunnel to prevent conflicts.\nYou can inspect current owner via: lsof -iTCP:($local_port) -sTCP:LISTEN -Pn (ansi reset)"
+            $is_any_port_used = true
+        }
+        # -------------------------------------------------------------------
+    }
+
+    if $is_any_port_used {
+        print $"(ansi red_bold)One or more required local ports are already in use. Aborting SSH tunnel setup.(ansi reset)"
+        exit 1
+    } else {
+        print $"(ansi green_bold)All required local ports are available. Proceeding to start SSH tunnels...(ansi reset)"
+    }
+
+    for bundle in ($local_ports | zip $amlt_job_names) {
+        let local_port = $bundle | first
+        let job_name = $bundle | last
+
+        let cmd = $"amlt ssh \"($job_name)\" -o \"StrictHostKeyChecking=no\" -o \"-4 -L ($local_port):localhost:43289\""
+        print $"Starting SSH tunnel for job '($job_name)' on local port ($local_port)..."
+
+        gnome-terminal --tab --title $"SSH Tunnel - ($job_name):($local_port)" -- bash -c $"($cmd); exec bash" | ignore
+        
+        sleep 5sec
+    }
+
+
+    print $"(ansi green_bold)SSH tunnels started. Waiting for REMOTE_URLs to become reachable...(ansi reset)"
+
+    # verify that all URLs are reachable by pinging /models
+    for url in ($remote_urls | split row ',') {
+        mut reachable = false
+        loop {
+            let response = (curl -si $"($url)/models" | head -n 1)
+            if ($response | str contains "200 OK") {
+                $reachable = true
+                break
+            } else {
+                print $"Waiting for REMOTE_URL ($url) to become reachable..."
+                sleep 30sec
+            }
+        }
+        if $reachable {
+            print $"REMOTE_URL ($url) is reachable."
+        }
+    }
+}
+
 export def run_batch [
     temps:list<number>,
     max_tokens_list:list<number>,
@@ -11,6 +86,8 @@ export def run_batch [
         EMB_REASONING_MODE: "0"                 # whether to add the reasoning prompt postfix
         EB_SUPRESS_DURATION_LOGS: "0"           # suppress duration logs in embodiedbench
         REMOTE_URL: "http://localhost:43289/v1" # default remote model where vllm is reachable
+        RUN_ALFRED: "1"                         # whether to run EB-ALFRED evaluations
+        RUN_HABITAT: "1"                        # whether to run EB-Habitat
     },  
     --replicates:int = 3,
     --no_pause = false,        # boolean switch default
@@ -97,7 +174,7 @@ export def run_batch [
         print "Spawned jobs after initial wait"
         job list
 
-        input "[Manual-Gate] Press Enter to start to automatically monitor job completion (or Ctrl+C to stop)..." 
+        input $"(ansi yellow_bold)[Manual-Gate] Press Enter to start to automatically monitor job completion \(or Ctrl+C to stop)...(ansi reset)" 
 
         # monitor ids
         print --no-newline "Starting job monitoring"
@@ -240,43 +317,50 @@ def run_basic_evals [exp_name: string] {
 
         let parent_job_id = job id
 
+        let model_basename = ($env.MODEL_NAME | split row '/' | last)
+
         # EB-ALFRED (parallel over all eval_sets) ---------------------------
         # Always run all supported evaluation sets; user no longer configures subset.
-        let model_basename = ($env.MODEL_NAME | split row '/' | last)
-        let alfred_all_sets = ["base" "common_sense" "complex_instruction" "spatial" "visual_appearance" "long_horizon"]
         mut alfred_job_ids: list<int> = []
         mut spawned_alfred_sets: list<string> = []
-        print "[EB-ALFRED] Running all evaluation sets." 
+        
+        if ($env.RUN_ALFRED? | default "1") != "1" {
+            print "[EB-ALFRED] Skipping EB-ALFRED evaluations as per RUN_ALFRED!=1."
+        } else {
+            let alfred_all_sets = ["base" "common_sense" "complex_instruction" "spatial" "visual_appearance" "long_horizon"]
+            print "[EB-ALFRED] Running all evaluation sets." 
 
-        let alfred_log_dir = ($log_dir | path join "EB-ALFRED")
-        mkdir $alfred_log_dir | ignore
+            let alfred_log_dir = ($log_dir | path join "EB-ALFRED")
+            mkdir $alfred_log_dir | ignore
 
-        for eval_set in $alfred_all_sets {
-            # Skip if summary.json already exists and SKIP_IF_DONE enabled
-            let summary_path = $"running/eb_alfred/($model_basename)_($exp_name)/($eval_set)/results/summary.json"
-            let already_done = ($summary_path | path exists)
-            if $already_done and ($env.SKIP_IF_DONE == '1') {
-                print $"[EB-ALFRED][SKIP] summary.json detected for eval_set='($eval_set)' -> skipping"
-                continue
-            }
-
-            let log_file = ($alfred_log_dir | path join $"($eval_set).log")
-            print $"[EB-ALFRED] Spawning eval_set='($eval_set)' ..."
-            let jobid = job spawn {
-                let cmd = $"conda run --no-capture-output -n embench python -m embodiedbench.main env=eb-alf model_name='($env.MODEL_NAME)' exp_name='($exp_name)' eval_sets='[($eval_set)]' ($env.EXTRA_ARGS) ($env.EXTRA_ARGS_EB_ALFRED) > '($log_file)' 2>&1"
-                let results = (bash -c $cmd | complete)
-                if $results.exit_code != 0 {
-                    echo $"[EB-ALFRED] Eval set ($eval_set) failed exit_code=($results.exit_code)"
-                    {env: 'alfred', set: $eval_set, status: 'error'} | job send $parent_job_id
-                } else {
-                    echo $"[EB-ALFRED] Eval set ($eval_set) done"
-                    {env: 'alfred', set: $eval_set, status: 'done'} | job send $parent_job_id
+            for eval_set in $alfred_all_sets {
+                # Skip if summary.json already exists and SKIP_IF_DONE enabled
+                let summary_path = $"running/eb_alfred/($model_basename)_($exp_name)/($eval_set)/results/summary.json"
+                let already_done = ($summary_path | path exists)
+                if $already_done and ($env.SKIP_IF_DONE == '1') {
+                    print $"[EB-ALFRED][SKIP] summary.json detected for eval_set='($eval_set)' -> skipping"
+                    continue
                 }
-            }
-            $alfred_job_ids = ($alfred_job_ids ++ [$jobid])
-            $spawned_alfred_sets = ($spawned_alfred_sets ++ [$eval_set])
 
-            sleep 5sec
+                let log_file = ($alfred_log_dir | path join $"($eval_set).log")
+                print $"[EB-ALFRED] Spawning eval_set='($eval_set)' ..."
+                let jobid = job spawn {
+                    let cmd = $"conda run --no-capture-output -n embench python -m embodiedbench.main env=eb-alf model_name='($env.MODEL_NAME)' exp_name='($exp_name)' eval_sets='[($eval_set)]' ($env.EXTRA_ARGS) ($env.EXTRA_ARGS_EB_ALFRED) > '($log_file)' 2>&1"
+                    let results = (bash -c $cmd | complete)
+                    if $results.exit_code != 0 {
+                        echo $"[EB-ALFRED] Eval set ($eval_set) failed exit_code=($results.exit_code)"
+                        {env: 'alfred', set: $eval_set, status: 'error'} | job send $parent_job_id
+                    } else {
+                        echo $"[EB-ALFRED] Eval set ($eval_set) done"
+                        {env: 'alfred', set: $eval_set, status: 'done'} | job send $parent_job_id
+                    }
+                }
+                $alfred_job_ids = ($alfred_job_ids ++ [$jobid])
+                $spawned_alfred_sets = ($spawned_alfred_sets ++ [$eval_set])
+
+                sleep 5sec
+            }
+
         }
 
         let alfred_jobs_count = ($spawned_alfred_sets | length)
@@ -284,44 +368,73 @@ def run_basic_evals [exp_name: string] {
             print "[EB-ALFRED] No eval_set jobs spawned (all skipped or none specified)."
         }
 
+
         # EB-Habitat (parallel per eval_set) --------------------------------
         # EB-Habitat always run all sets
-        let habitat_all_sets = ["base" "common_sense" "complex_instruction" "spatial_relationship" "visual_appearance" "long_horizon"]
         mut habitat_job_ids: list<int> = []
         mut spawned_habitat_sets: list<string> = []
-        print "[EB-Habitat] Running all evaluation sets." 
 
-        let habitat_log_dir = ($log_dir | path join "EB-Habitat")
-        mkdir $habitat_log_dir | ignore
+        if ($env.RUN_HABITAT? | default "1") != "1" {
+            print "[EB-Habitat] Skipping EB-Habitat evaluations as per RUN_HABITAT!=1."
+            return
+        } else {
+            let habitat_all_sets = ["base" "common_sense" "complex_instruction" "spatial_relationship" "visual_appearance" "long_horizon"]
+            print "[EB-Habitat] Running all evaluation sets." 
 
-        for eval_set in $habitat_all_sets {
-            let summary_path = $"running/eb_habitat/($model_basename)_($exp_name)/($eval_set)/results/summary.json"
-            let already_done = ($summary_path | path exists)
-            if $already_done and ($env.SKIP_IF_DONE == '1') {
-                print $"[EB-Habitat][SKIP] summary.json detected for eval_set='($eval_set)' -> skipping"
-                continue
-            }
-            let log_file = ($habitat_log_dir | path join $"($eval_set).log")
-            print $"[EB-Habitat] Spawning eval_set='($eval_set)' ..."
-            let jobid = job spawn {
-                let cmd = $"conda run --no-capture-output -n embench python -m embodiedbench.main env=eb-hab model_name='($env.MODEL_NAME)' exp_name='($exp_name)' eval_sets='[($eval_set)]' ($env.EXTRA_ARGS) ($env.EXTRA_ARGS_EB_HAB) > '($log_file)' 2>&1"
-                let results = (bash -c $cmd | complete)
-                if $results.exit_code != 0 {
-                    echo $"[EB-Habitat] Eval set ($eval_set) failed exit_code=($results.exit_code)"
-                    {env: 'habitat', set: $eval_set, status: 'error'} | job send $parent_job_id
-                } else {
-                    echo $"[EB-Habitat] Eval set ($eval_set) done"
-                    {env: 'habitat', set: $eval_set, status: 'done'} | job send $parent_job_id
+            let habitat_log_dir = ($log_dir | path join "EB-Habitat")
+            mkdir $habitat_log_dir | ignore
+
+            for eval_set in $habitat_all_sets {
+                let summary_path = $"running/eb_habitat/($model_basename)_($exp_name)/($eval_set)/results/summary.json"
+                let already_done = ($summary_path | path exists)
+                if $already_done and ($env.SKIP_IF_DONE == '1') {
+                    print $"[EB-Habitat][SKIP] summary.json detected for eval_set='($eval_set)' -> skipping"
+                    continue
                 }
+                let log_file = ($habitat_log_dir | path join $"($eval_set).log")
+                print $"[EB-Habitat] Spawning eval_set='($eval_set)' ..."
+                let jobid = job spawn {
+                    let cmd = $"conda run --no-capture-output -n embench python -m embodiedbench.main env=eb-hab model_name='($env.MODEL_NAME)' exp_name='($exp_name)' eval_sets='[($eval_set)]' ($env.EXTRA_ARGS) ($env.EXTRA_ARGS_EB_HAB) > '($log_file)' 2>&1"
+                    
+                    # habitat only works on gpu, and will fail with a segmentation fault if the GPU is full
+                    # so we do a `do while` loop here to retry on segfaults
+                    mut results = {}
+                    while true {
+                        $results = (bash -c $cmd | complete)
+
+                        let has_seg_fault: bool = (try { open $log_file | str contains "Segmentation fault" } catch { false })
+                        if (not $has_seg_fault) {
+                            break
+                        } 
+
+                        # wait 30 min with some jitter of 15 min
+                        let sleep_duration = (30 + (random int 0..15))
+
+                        print $"[retry_habitat:($eval_set)] segfault detected; sleeping ($sleep_duration) minutes then retrying..."
+
+                        sleep ($"($sleep_duration)min" | into duration)
+                    }
+
+                    if $results.exit_code != 0 {
+                        echo $"[EB-Habitat] Eval set ($eval_set) failed exit_code=($results.exit_code)"
+                        {env: 'habitat', set: $eval_set, status: 'error'} | job send $parent_job_id
+                    } else {
+                        echo $"[EB-Habitat] Eval set ($eval_set) done"
+                        {env: 'habitat', set: $eval_set, status: 'done'} | job send $parent_job_id
+                    }
+                }
+                $habitat_job_ids = ($habitat_job_ids ++ [$jobid])
+                $spawned_habitat_sets = ($spawned_habitat_sets ++ [$eval_set])
+
+                sleep 10sec
             }
-            $habitat_job_ids = ($habitat_job_ids ++ [$jobid])
-            $spawned_habitat_sets = ($spawned_habitat_sets ++ [$eval_set])
 
-            sleep 5sec
         }
-
+        
         let habitat_jobs_count = ($spawned_habitat_sets | length)
-        if $habitat_jobs_count == 0 { print "[EB-Habitat] No eval_set jobs spawned (all skipped or none specified)." }
+        if $habitat_jobs_count == 0 { 
+            print "[EB-Habitat] No eval_set jobs spawned (all skipped or none specified)." 
+        }
 
         # Immutable snapshot of job ids for later cleanup
         let alfred_job_ids_snapshot = $alfred_job_ids
