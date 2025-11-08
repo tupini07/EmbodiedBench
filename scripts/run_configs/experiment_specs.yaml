@@ -183,24 +183,25 @@ experiments:
     temperature: [0.6]
     amlt_job_names:
       - thorough-rabbit
-      - national-dolphin
+      - fair-sunbeam
     extra_env:
       REMOTE_URL: "http://localhost:52001/v1,http://localhost:52002/v1"
 
-  # ---------------------------------------------------------------------------------------------------------------------------------------
-  # below are drafts waiting for compute
-  # ---------------------------------------------------------------------------------------------------------------------------------------
 
   - prefix: "baseline-videor1-sft-qwen2.5-vl-7b-instruct"
-    draft: true
     max_tokens: [4096]
     temperature: [0.6]
     amlt_job_names:
-      - 
+      - cosmic-flamingo
+      - live-jackal
     extra_env:
       REMOTE_URL: "http://localhost:53001/v1,http://localhost:53002/v1"
       RUN_MANIPULATION: "1"
       RUN_NAVIGATION: "1"  
+
+  # ---------------------------------------------------------------------------------------------------------------------------------------
+  # below are drafts waiting for compute
+  # ---------------------------------------------------------------------------------------------------------------------------------------
 
   - prefix: "baseline-videor1-rl-qwen2.5-vl-7b-instruct"
     draft: true

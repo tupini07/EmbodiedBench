@@ -55,6 +55,20 @@ def main [prefix:string] {
     let global_no_pause = ($base.no_pause? | default false)
 
     if (($amlt_job_names | length) > 0) and ($remote_urls | str length) > 0 {
+        job spawn {
+            # reword all amulet jobs descriptions so they match the prefix. We don't really care about the result of this. It's mainly for bookkeeping.
+            with-env {
+                AZ_SUBSCRIPTION_ID: "2cd190bb-b42a-477c-b1bb-2f20932d8dc5"
+                AZ_RESOURCE_GROUP: "atupinirg"
+                AZ_WORKSPACE_NAME: "atupinirgws"
+            } {
+                let target_name = $"EmbodiedBench-vllm-($prefix)"
+                for job_name in $amlt_job_names {
+                    conda run -n base python scripts/amlt_set_display_name.py $"($target_name)" ...$amlt_job_names
+                }
+            }
+        }
+
         print $"[SSH] Starting tunnels for prefix=($prefix) urls=($remote_urls)"
         start_ssh_tunnels $amlt_job_names $remote_urls
     }
