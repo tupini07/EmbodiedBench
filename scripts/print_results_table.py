@@ -22,15 +22,28 @@ import pandas as pd
 
 
 def load_summary_json(file_path: Path) -> Dict[str, Any]:
-    """Load and parse a summary.json file."""
+    """Load and parse a summary.json file.
+    
+    Normalizes key names across different environments:
+    - 'success_rate' (eb_manipulation) -> 'task_success'
+    """
     with open(file_path, "r") as f:
         data = json.load(f)
+    
+    # Normalize key names for consistency across environments
+    if 'success_rate' in data and 'task_success' not in data:
+        data['task_success'] = data['success_rate']
+    
     return data
 
 
 def parse_results_structure(running_dir: Path) -> Dict[str, Dict[str, Dict[str, Path]]]:
     """
     Parse the running directory structure.
+    
+    Handles two directory structures:
+    1. Standard: running/{env_name}/{exp_name}/{dimension}/results/summary.json
+    2. Nested (eb_manipulation): running/{env_name}/{model_name}/{exp_name}/{dimension}/results/summary.json
 
     Returns:
         Dict with structure: {env_name: {experiment_name: {dimension: summary_json_path}}}
@@ -45,27 +58,66 @@ def parse_results_structure(running_dir: Path) -> Dict[str, Dict[str, Dict[str, 
 
         env_name = env_dir.name
 
-        # Iterate through each experiment directory
+        # Iterate through each experiment directory (or model directory for nested structure)
         for exp_dir in env_dir.iterdir():
             if not exp_dir.is_dir() or exp_dir.name.startswith("."):
                 continue
 
-            exp_name = exp_dir.name
-
-            # Iterate through each dimension directory (base, common_sense, etc.)
-            for dim_dir in exp_dir.iterdir():
-                if not dim_dir.is_dir() or dim_dir.name.startswith("."):
+            # Check if this directory contains dimension folders directly
+            # or if it's a model directory that contains experiment folders
+            has_results = False
+            subdirs = list(exp_dir.iterdir())
+            
+            # Check if any subdirectory has results/summary.json
+            for subdir in subdirs:
+                if not subdir.is_dir():
                     continue
+                test_summary = subdir / "results" / "summary.json"
+                test_summary_all = subdir / "results" / "summary_all.json"
+                if test_summary.exists() or test_summary_all.exists():
+                    has_results = True
+                    break
+            
+            if has_results:
+                # Standard structure: exp_dir contains dimensions directly
+                exp_name = exp_dir.name
+                for dim_dir in exp_dir.iterdir():
+                    if not dim_dir.is_dir() or dim_dir.name.startswith("."):
+                        continue
 
-                dimension = dim_dir.name
-                summary_path = dim_dir / "results" / "summary.json"
-                summary_all_path = dim_dir / "results" / "summary_all.json"
+                    dimension = dim_dir.name
+                    summary_path = dim_dir / "results" / "summary.json"
+                    summary_all_path = dim_dir / "results" / "summary_all.json"
 
-                # Try both summary.json and summary_all.json
-                if summary_path.exists():
-                    results[env_name][exp_name][dimension] = summary_path
-                elif summary_all_path.exists():
-                    results[env_name][exp_name][dimension] = summary_all_path
+                    # Try both summary.json and summary_all.json
+                    if summary_path.exists():
+                        results[env_name][exp_name][dimension] = summary_path
+                    elif summary_all_path.exists():
+                        results[env_name][exp_name][dimension] = summary_all_path
+            else:
+                # Nested structure: exp_dir is a model directory containing experiments
+                model_prefix = exp_dir.name
+                for nested_exp_dir in exp_dir.iterdir():
+                    if not nested_exp_dir.is_dir() or nested_exp_dir.name.startswith("."):
+                        continue
+                    
+                    # Construct experiment name with model prefix
+                    exp_name = f"{model_prefix}_{nested_exp_dir.name}"
+                    
+                    # Iterate through each dimension directory
+                    for dim_dir in nested_exp_dir.iterdir():
+                        if not dim_dir.is_dir() or dim_dir.name.startswith("."):
+                            continue
+
+                        dimension = dim_dir.name
+                        summary_path = dim_dir / "results" / "summary.json"
+                        summary_all_path = dim_dir / "results" / "summary_all.json"
+
+                        # Try both summary.json and summary_all.json
+                        if summary_path.exists():
+                            results[env_name][exp_name][dimension] = summary_path
+                        elif summary_all_path.exists():
+                            results[env_name][exp_name][dimension] = summary_all_path
 
     return results
 
@@ -86,9 +138,7 @@ def print_environment_table(
     env_name: str, experiments_data: Dict[str, Dict[str, Path]]
 ):
     """Print a table for a single environment."""
-    print(f"\n{'='*100}")
-    print(f"Environment: {env_name.upper()}")
-    print(f"{'='*100}\n")
+    print(f"\n## Environment: {env_name.upper()}\n")
 
     if not experiments_data:
         print("No results found for this environment.\n")
@@ -146,9 +196,7 @@ def print_environment_table(
 
 def print_compact_table(env_name: str, experiments_data: Dict[str, Dict[str, Path]]):
     """Print a compact table showing key metrics for all dimensions of an environment."""
-    print(f"\n{'='*150}")
-    print(f"Environment: {env_name.upper()} - COMPACT VIEW")
-    print(f"{'='*150}\n")
+    print(f"\n## Environment: {env_name.upper()} - COMPACT VIEW\n")
 
     if not experiments_data:
         print("No results found for this environment.\n")
@@ -194,9 +242,7 @@ def print_compact_table(env_name: str, experiments_data: Dict[str, Dict[str, Pat
 
 def print_summary_table(env_name: str, experiments_data: Dict[str, Dict[str, Path]], all_experiments: Optional[Set[str]] = None):
     """Print a summary table showing task_success for all experiments and dimensions, with average invalid action ratio."""
-    print(f"\n{'='*150}")
-    print(f"Environment: {env_name.upper()} - SUMMARY (Task Success)")
-    print(f"{'='*150}\n")
+    print(f"\n## Environment: {env_name.upper()} - SUMMARY (Task Success)\n")
 
     # Get all dimensions across all experiments in this environment
     all_dimensions = set()
@@ -420,10 +466,72 @@ def print_aggregated_summary_tables(env_name: str, experiments_data: Dict[str, D
             row_cells.append(missing_msg(EXPECTED_REPS))
         rows.append(row_cells)
 
-    print(f"\n{'='*150}")
-    print(f"Environment: {env_name.upper()} - AGGREGATED SUMMARY (Reworked Mean ± Std of Task Success)" )
-    print(f"{'='*150}\n")
+    print(f"\n## Environment: {env_name.upper()} - AGGREGATED SUMMARY (Reworked Mean ± Std of Task Success)\n" )
     print(tabulate(rows, headers=headers, tablefmt='pipe'))
+    print()
+
+
+def print_combined_summary_table(all_results: Dict[str, Dict[str, Dict[str, Path]]]):
+    """Print a single combined table with all environments, experiments, and dimensions.
+    
+    Creates one large table with columns:
+    - Environment
+    - Experiment
+    - All dimensions (union across all environments)
+    - Avg Invalid Action Ratio
+    
+    Missing dimensions for specific environments are shown as empty cells.
+    """
+    print("## ALL ENVIRONMENTS - COMBINED SUMMARY\n")
+    
+    # Collect all unique dimensions across all environments
+    all_dimensions: Set[str] = set()
+    for env_data in all_results.values():
+        for exp_data in env_data.values():
+            all_dimensions.update(exp_data.keys())
+    
+    dimensions_sorted = sorted(all_dimensions)
+    
+    # Build headers: Environment, Experiment, all dimensions, Avg Invalid Action Ratio
+    headers = ["Environment", "Experiment"] + dimensions_sorted + ["Avg Invalid Action Ratio"]
+    
+    # Collect all rows
+    rows: List[List[str]] = []
+    
+    for env_name in sorted(all_results.keys()):
+        experiments_data = all_results[env_name]
+        
+        for exp_name in sorted(experiments_data.keys()):
+            row = [env_name, exp_name]
+            
+            invalid_ratios = []
+            
+            # Add data for each dimension
+            for dimension in dimensions_sorted:
+                if dimension in experiments_data[exp_name]:
+                    summary_path = experiments_data[exp_name][dimension]
+                    data = load_summary_json(summary_path)
+                    task_success = data.get("task_success")
+                    row.append(format_value(task_success))
+                    
+                    # Collect invalid action ratios for averaging
+                    invalid_ratio = data.get("num_invalid_action_ratio")
+                    if invalid_ratio is not None and not math.isnan(invalid_ratio):
+                        invalid_ratios.append(invalid_ratio)
+                else:
+                    # Empty cell for missing dimension
+                    row.append("")
+            
+            # Calculate and add average invalid action ratio
+            if invalid_ratios:
+                avg_invalid_ratio = sum(invalid_ratios) / len(invalid_ratios)
+                row.append(format_value(avg_invalid_ratio))
+            else:
+                row.append("")
+            
+            rows.append(row)
+    
+    print(tabulate(rows, headers=headers, tablefmt="pipe"))
     print()
 
 
@@ -468,25 +576,26 @@ def main():
     # for env_name in sorted(results.keys()):
     #     print_compact_table(env_name, results[env_name])
 
-    # Print summary tables (task_success with average invalid action ratio)
-    print("\n" + "=" * 150)
-    print("SUMMARY TABLES - TASK SUCCESS WITH AVG INVALID ACTION RATIO")
-    print("=" * 150)
-
-    # Collect all experiment names across all environments
-    all_experiments = set()
-    for env_data in results.values():
-        all_experiments.update(env_data.keys())
-
-    for env_name in sorted(results.keys()):
-        print_summary_table(env_name, results[env_name], all_experiments)
-
     # Print aggregated mean ± std tables
-    print("\n" + "=" * 150)
-    print("AGGREGATED SUMMARY TABLES - MEAN ± STD OF TASK SUCCESS")
-    print("=" * 150)
+    print("\n# AGGREGATED SUMMARY TABLES - MEAN ± STD OF TASK SUCCESS\n")
     for env_name in sorted(results.keys()):
         print_aggregated_summary_tables(env_name, results[env_name])
+
+    # Print combined summary table (all environments in one table)
+    print("\n# COMBINED SUMMARY TABLE - ALL ENVIRONMENTS\n")
+    print_combined_summary_table(results)
+    
+    # # Print individual summary tables (task_success with average invalid action ratio)
+    # print("\n# INDIVIDUAL SUMMARY TABLES - TASK SUCCESS WITH AVG INVALID ACTION RATIO\n")
+
+    # # Collect all experiment names across all environments
+    # all_experiments = set()
+    # for env_data in results.values():
+    #     all_experiments.update(env_data.keys())
+
+    # for env_name in sorted(results.keys()):
+    #     print_summary_table(env_name, results[env_name], all_experiments)
+
 
 
 if __name__ == "__main__":

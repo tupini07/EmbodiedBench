@@ -50,9 +50,20 @@ def ensure-lock-dir [] { mkdir running/locks | ignore }
 def lock-file [prefix:string] { $"running/locks/($prefix).lock" }
 
 def is-prefix-running [prefix:string] {
-	let script = $"ps -eo pid,command | grep -E '($prefix)' | grep -v grep | awk '{print $1}'"
-	let pids = (bash -c $script | lines | where $it != "")
-	($pids | length) > 0
+	let lf = (lock-file $prefix)
+	let lock_exists = ($lf | path exists)
+	if (not $lock_exists) { return false }
+	
+	# Extract PID from lock file (format: timestamp=...; pid=12345)
+	let lock_content = (try { open $lf } catch { return false })
+	let pid_match = ($lock_content | parse --regex 'pid=(?P<pid>\d+)')
+	if ($pid_match | length) == 0 { return false }
+	
+	let pid = ($pid_match | first | get pid)
+	
+	# Check if process is still running using system ps command
+	let is_running = (bash -c $"ps -p ($pid) > /dev/null 2>&1" | complete | get exit_code) == 0
+	$is_running
 }
 
 def gc-stale-locks [] {
@@ -74,6 +85,7 @@ def skip-launch? [prefix:string] {
 	let lf = (lock-file $prefix)
 	let lock_exists = ($lf | path exists)
 	if (not $lock_exists) { return false }
+
 	let running = (is-prefix-running $prefix)
 	if $running { return true } else { false }
 }

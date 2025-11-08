@@ -55,6 +55,7 @@ export def start_ssh_tunnels  [
 
 
     print $"(ansi green_bold)SSH tunnels started. Waiting for REMOTE_URLs to become reachable...(ansi reset)"
+    sleep 10sec
 
     # verify that all URLs are reachable by pinging /models
     for url in ($remote_urls | split row ',') {
@@ -88,6 +89,8 @@ export def run_batch [
         REMOTE_URL: "http://localhost:43289/v1" # default remote model where vllm is reachable
         RUN_ALFRED: "1"                         # whether to run EB-ALFRED evaluations
         RUN_HABITAT: "1"                        # whether to run EB-Habitat
+        RUN_MANIPULATION: "0"                   # whether to run EB-Manipulation evaluations
+        RUN_NAVIGATION: "0"                     # whether to run EB-Navigation evaluations
     },  
     --amlt_job_names:list<string> = [],
     --replicates:int = 3,
@@ -123,7 +126,11 @@ export def run_batch [
 
                         let dones_exists = (ls running/dones | where name == $"($run_name)_dones.txt" | length) > 0
                         # Only skip if prior marker indicates all sets succeeded (ALL DONE OK)
-                        let contains_done = (if $dones_exists { (try { open $dones_path | str contains "ALL DONE OK" } catch { false }) } else { false })
+                        # let contains_done = (if $dones_exists { (try { open $dones_path | str contains "ALL DONE OK" } catch { false }) } else { false })
+                        
+                        # todo(atupini) forcing re-check for now. Adding new benchmaks breaks if all done is here even if that
+                        # benchmark is not really done yet
+                        let contains_done = false
 
                         let has_done = $dones_exists and $contains_done
                         if $has_done {
@@ -150,8 +157,10 @@ export def run_batch [
                             print ""
                             input $"(ansi purple_italic)Press Enter to launch the next replicate \(or Ctrl+C to stop)...(ansi reset)" 
                             print ""
-                        } catch {
+                        } catch { |err|
                             print "Interrupted by user during pause. Cleaning up spawned jobs..."
+                            print $err
+
                             print "Currently running jobs:"
                             job list
                             job list | each { |j| 
@@ -182,9 +191,6 @@ export def run_batch [
             mut statuses: list<record> = []
             let expected_jobs = ($spawned_jobs_ids | length)
 
-            mut n_success = 0
-            mut n_failure = 0
-
             loop {
                 if (($completed_runs | length) >= $expected_jobs) { break }
 
@@ -194,9 +200,6 @@ export def run_batch [
                         {kind: 'exp', exp_name: $ename, status: $st} => {
                             let succ: int = ($msg.successes? | default 0)
                             let fail: int = ($msg.failures? | default 0)
-
-                            $n_success += $succ
-                            $n_failure += $fail
 
                             if not ($completed_runs | any {|x| $x == $ename}) {
                                 $completed_runs = ($completed_runs ++ [$ename])
@@ -223,14 +226,14 @@ export def run_batch [
             print "=========================================================="
 
             # if no failures then offer to stop amulet jobs
-            if ($n_failure == 0 and ($amlt_job_names | length) > 0) {
+            if ($failure_count == 0 and ($amlt_job_names | length) > 0) {
                 let answer = input $"(ansi green_bold)All jobs completed successfully with zero failures. Do you want me to stop the Amulet jobs? \(y/[n])(ansi reset)"
                 if $answer == "y" or $answer == "Y" {
                     for job_name in $amlt_job_names {
-                        print $"Stopping Amulet job: ($job_name)"
-                        bash -c $'amlt cancel ":($job_name)"'
+                        print $"Pausing Amulet job: ($job_name)"
+                        bash -c $'amlt pause ($job_name)'
                     }
-                    print $"(ansi green_bold)Amulet jobs stopped.(ansi reset)"
+                    print $"(ansi green_bold)Amulet jobs paused.(ansi reset)"
                 } else {
                     print $"(ansi yellow_bold)Amulet jobs left running as per user choice.(ansi reset)"
                 }
@@ -239,7 +242,7 @@ export def run_batch [
 
         } catch { |err|
             print "Error occurred during job submission"
-            print $"Error details: ($err)"
+            print $err
             
             $spawned_jobs_ids | each { |jid| 
                 print $"Cleaning up job ID: ($jid)"
@@ -249,31 +252,34 @@ export def run_batch [
             kill-all-regex $prefix
             exit 1
         }
-    } catch {
+    } catch { |err|
         # Fallback error handler: attempt regex-based termination of stray processes using the provided prefix
         print "Error during run_batch execution. Attempting regex-based cleanup with prefix pattern."
+        print $err
+
         kill-all-regex $prefix
     }
 }
 
 # Regex-based killer that matches the FULL command line (using ps -eo pid,command) against a user-provided regex.
 # Safer than killall with partial names; ignores empty pattern and self process.
-def kill-all-regex [pattern: string] {
+export def kill-all-regex [pattern: string] {
     if ($pattern | str length) == 0 {
         print "[kill-all-regex] Empty pattern provided; nothing to kill."
         return
     }
     print $"(ansi red_bold)[kill-all-regex] Killing processes whose command matches regex: /($pattern)/ (ansi reset)"
-    let script = $"ps -eo pid,command | grep -E '($pattern)' | grep -v grep | awk '{print $1}'"
+    let script = $"ps -eo pid,command | grep -E '($pattern)' | grep 'python -m embodiedbench.main' | grep -v grep | awk '{print $1}'"
     let pids = (bash -c $script | lines | where $it != "")
     if ($pids | length) == 0 {
         print "[kill-all-regex] No matching processes found."
         return
     }
     for p in $pids {
-        if ($p | into int) == (pid) { continue }
-        print $"[kill-all-regex] kill -9 ($p)"
-        try { bash -c $"kill -9 ($p)" } catch { print $"[kill-all-regex][WARN] Failed to kill pid ($p)" }
+        let current_pid = $nu.pid
+        if $p == $current_pid { continue }
+        print $"[kill-all-regex] kill ($p)"
+        try { bash -c $"kill ($p)" } catch { print $"[kill-all-regex][WARN] Failed to kill pid ($p)" }
     }
 }
 
@@ -302,7 +308,10 @@ def run_basic_evals [
         let prior_done_exists = ($prior_done_file | path exists)
        
         # Prior run considered complete only if success-only marker present
-        let prior_has_all_done = (if $prior_done_exists { (try { open $prior_done_file | str contains "ALL DONE OK" } catch { false }) } else { false })
+        # let prior_has_all_done = (if $prior_done_exists { (try { open $prior_done_file | str contains "ALL DONE OK" } catch { false }) } else { false })
+
+        # todo(atupini) forcing re-check for now. Adding new benchmarks breaks if all done is here even if that
+        let prior_has_all_done = false
 
         if ($env.FORCE_RERUN == "1") {
             print $"[FORCE_RERUN] Forcing rerun for exp_name '($exp_name)' \(ignoring any existing results)."
@@ -385,9 +394,6 @@ def run_basic_evals [
         # Per-experiment log directory
         let log_dir = $"logs/($exp_name)"
 
-        # delete if exists
-        try { rm -r $log_dir }
-
         mkdir $log_dir | ignore
 
         let parent_job_id = job id
@@ -414,6 +420,8 @@ def run_basic_evals [
                 let already_done = ($summary_path | path exists)
                 if $already_done and ($env.SKIP_IF_DONE == '1') {
                     print $"[EB-ALFRED][SKIP] summary.json detected for eval_set='($eval_set)' -> skipping"
+                    {env: 'alfred', set: $eval_set, status: 'done'} | job send $parent_job_id
+                    $spawned_alfred_sets = ($spawned_alfred_sets ++ [$eval_set])
                     continue
                 }
 
@@ -464,6 +472,8 @@ def run_basic_evals [
                 let already_done = ($summary_path | path exists)
                 if $already_done and ($env.SKIP_IF_DONE == '1') {
                     print $"[EB-Habitat][SKIP] summary.json detected for eval_set='($eval_set)' -> skipping"
+                    {env: 'habitat', set: $eval_set, status: 'done'} | job send $parent_job_id
+                    $spawned_habitat_sets = ($spawned_habitat_sets ++ [$eval_set])
                     continue
                 }
                 let log_file = ($habitat_log_dir | path join $"($eval_set).log")
@@ -511,89 +521,158 @@ def run_basic_evals [
             print "[EB-Habitat] No eval_set jobs spawned (all skipped or none specified)." 
         }
 
+        # EB-Manipulation (parallel per eval_set) ---------------------------
+        # Spawns one job per manipulation eval set if RUN_MANIPULATION==1.
+        # Includes basic CoppeliaSim/PyRep environment setup inside each job.
+        mut manipulation_job_ids: list<int> = []
+        mut spawned_manipulation_sets: list<string> = []
+
+        if ($env.RUN_MANIPULATION? | default "0") != "1" {
+            print "[EB-Manipulation] Skipping EB-Manipulation evaluations as per RUN_MANIPULATION!=1."
+        } else {
+            let manipulation_all_sets = ["base" "common_sense" "complex" "spatial" "visual"]
+            print "[EB-Manipulation] Running all evaluation sets." 
+
+            let manip_log_dir = ($log_dir | path join "EB-Manipulation")
+            mkdir $manip_log_dir | ignore
+
+            for eval_set in $manipulation_all_sets {
+                # Skip if summary.json already exists and SKIP_IF_DONE enabled
+                let summary_path = $"running/eb_manipulation/($model_basename)/($exp_name)/($eval_set)/results/summary.json"
+                let already_done = ($summary_path | path exists)
+                if $already_done and ($env.SKIP_IF_DONE == '1') {
+                    print $"[EB-Manipulation][SKIP] summary.json detected for eval_set='($eval_set)' -> skipping"
+                    {env: 'manip', set: $eval_set, status: 'done'} | job send $parent_job_id
+                    $spawned_manipulation_sets = ($spawned_manipulation_sets ++ [$eval_set])
+                    continue
+                }
+
+                let log_file = ($manip_log_dir | path join $"($eval_set).log")
+                print $"[EB-Manipulation] Spawning eval_set='($eval_set)' ..."
+                let jobid = job spawn {
+                    let parent_job_id = job id
+                    # Attempt lightweight environment setup (CoppeliaSim / PyRep)
+                    let root_coppelia = ($env.PWD | path join "CoppeliaSim_Pro_V4_1_0_Ubuntu20_04")
+                    let alt_coppelia = ($env.PWD | path join "embodiedbench" "envs" "eb_manipulation" "CoppeliaSim_Pro_V4_1_0_Ubuntu20_04")
+                    let chosen = if ($root_coppelia | path exists) { $root_coppelia } else if ($alt_coppelia | path exists) { $alt_coppelia } else { null }
+                    if $chosen == null {
+                        print "[EB-Manipulation] CoppeliaSim directory not found; aborting eval set.";
+                        {env: 'manip', set: $eval_set, status: 'error'} | job send $parent_job_id
+                    } else {
+                        let sys_dir = ($chosen | path join "system")
+                        let usrset = ($sys_dir | path join "usrset.txt")
+                        if not ($usrset | path exists) { mkdir $sys_dir | ignore; touch $usrset }
+                        let ld_old = ($env.LD_LIBRARY_PATH? | default "")
+                        let ld_new = (if ($ld_old | is-empty) { $chosen } else { $"($chosen):($ld_old)" })
+                        load-env {
+                            COPPELIASIM_ROOT: $chosen
+                            LD_LIBRARY_PATH: $ld_new
+                            QT_QPA_PLATFORM_PLUGIN_PATH: $chosen
+                        }
+                        # Quick PyRep import test (non-fatal)
+                        let pyrep_test = (bash -c "conda run -n embench_man python -c 'import pyrep'" | complete)
+                        if $pyrep_test.exit_code != 0 {
+                            print "[EB-Manipulation] PyRep import failed pre-run test; continuing but evaluation may fail." 
+                        }
+                        let cmd = $"conda run --no-capture-output -n embench_man python -m embodiedbench.main env=eb-man model_name='($env.MODEL_NAME)' exp_name='($exp_name)' eval_sets='[($eval_set)]' ($env.EXTRA_ARGS) ($env.EXTRA_ARGS_EB_MAN) > '($log_file)' 2>&1"
+                        
+                        # EB-Manipulation can fail with CUDA out of memory errors when GPU is full
+                        # so we do a `do while` loop here to retry on CUDA OOM errors
+                        mut results = {}
+                        while true {
+                            $results = (bash -c $cmd | complete)
+
+                            let has_cuda_oom: bool = (try { open $log_file | str contains "CUDA error: out of memory" } catch { false })
+                            if (not $has_cuda_oom) {
+                                break
+                            } 
+
+                            # wait 30 min with some jitter of 15 min
+                            let sleep_duration = (30 + (random int 0..15))
+
+                            print $"[retry_manipulation:($eval_set)] CUDA OOM detected; sleeping ($sleep_duration) minutes then retrying..."
+
+                            sleep ($"($sleep_duration)min" | into duration)
+                        }
+
+                        if $results.exit_code != 0 {
+                            echo $"[EB-Manipulation] Eval set ($eval_set) failed exit_code=($results.exit_code)"
+                            {env: 'manip', set: $eval_set, status: 'error'} | job send $parent_job_id
+                        } else {
+                            echo $"[EB-Manipulation] Eval set ($eval_set) done"
+                            {env: 'manip', set: $eval_set, status: 'done'} | job send $parent_job_id
+                        }
+                    }
+                }
+                $manipulation_job_ids = ($manipulation_job_ids ++ [$jobid])
+                $spawned_manipulation_sets = ($spawned_manipulation_sets ++ [$eval_set])
+                sleep 10sec
+            }
+        }
+
+        let manipulation_jobs_count = ($spawned_manipulation_sets | length)
+        if $manipulation_jobs_count == 0 {
+            print "[EB-Manipulation] No eval_set jobs spawned (all skipped or none specified)."
+        }
+
+        # EB-Navigation (parallel per eval_set) ------------------------------
+        mut navigation_job_ids: list<int> = []
+        mut spawned_navigation_sets: list<string> = []
+
+        if ($env.RUN_NAVIGATION? | default "0") != "1" {
+            print "[EB-Navigation] Skipping EB-Navigation evaluations as per RUN_NAVIGATION!=1."
+        } else {
+            let navigation_all_sets = ["base" "common_sense" "complex_instruction" "visual_appearance" "long_horizon"]
+            print "[EB-Navigation] Running all evaluation sets." 
+
+            let nav_log_dir = ($log_dir | path join "EB-Navigation")
+            mkdir $nav_log_dir | ignore
+
+            for eval_set in $navigation_all_sets {
+                let summary_path = $"running/eb_nav/($model_basename)_($exp_name)/($eval_set)/results/summary.json"
+                let already_done = ($summary_path | path exists)
+                if $already_done and ($env.SKIP_IF_DONE == '1') {
+                    print $"[EB-Navigation][SKIP] summary.json detected for eval_set='($eval_set)' -> skipping"
+                    {env: 'nav', set: $eval_set, status: 'done'} | job send $parent_job_id
+                    $spawned_navigation_sets = ($spawned_navigation_sets ++ [$eval_set])
+                    continue
+                }
+                let log_file = ($nav_log_dir | path join $"($eval_set).log")
+                print $"[EB-Navigation] Spawning eval_set='($eval_set)' ..."
+                let jobid = job spawn {
+                    let parent_job_id = job id
+                    let cmd = $"conda run --no-capture-output -n embench_nav python -m embodiedbench.main env=eb-nav model_name='($env.MODEL_NAME)' exp_name='($exp_name)' eval_sets='[($eval_set)]' ($env.EXTRA_ARGS) ($env.EXTRA_ARGS_EB_NAV) > '($log_file)' 2>&1"
+                    let results = (bash -c $cmd | complete)
+                    if $results.exit_code != 0 {
+                        echo $"[EB-Navigation] Eval set ($eval_set) failed exit_code=($results.exit_code)"
+                        {env: 'nav', set: $eval_set, status: 'error'} | job send $parent_job_id
+                    } else {
+                        echo $"[EB-Navigation] Eval set ($eval_set) done"
+                        {env: 'nav', set: $eval_set, status: 'done'} | job send $parent_job_id
+                    }
+                }
+                $navigation_job_ids = ($navigation_job_ids ++ [$jobid])
+                $spawned_navigation_sets = ($spawned_navigation_sets ++ [$eval_set])
+                sleep 5sec
+            }
+        }
+
+        let navigation_jobs_count = ($spawned_navigation_sets | length)
+        if $navigation_jobs_count == 0 {
+            print "[EB-Navigation] No eval_set jobs spawned (all skipped or none specified)."
+        }
+
         # Immutable snapshot of job ids for later cleanup
         let alfred_job_ids_snapshot = $alfred_job_ids
         let habitat_job_ids_snapshot = $habitat_job_ids
+        let manipulation_job_ids_snapshot = $manipulation_job_ids
+        let navigation_job_ids_snapshot = $navigation_job_ids
 
-        # # EB-Manipulation ----------------------------------------------------
-        # let manipulation_job_id = job spawn {
-        #     let log_file = ($log_dir | path join "EB-Manipulation.log")
-        #     print $"[EB-Man] Starting manipulation setup..."
-
-        #     let root_coppelia = ($env.PWD | path join "CoppeliaSim_Pro_V4_1_0_Ubuntu20_04")
-        #     let alt_coppelia = ($env.PWD | path join "embodiedbench" "envs" "eb_manipulation" "CoppeliaSim_Pro_V4_1_0_Ubuntu20_04")
-        #     let chosen = if ($root_coppelia | path exists) { $root_coppelia } else if ($alt_coppelia | path exists) { $alt_coppelia } else { null }
-        #     if $chosen == null {
-        #         print "[EB-Man] CoppeliaSim directory not found in either expected path.";
-        #         print $"[EB-Man] Expected one of: ($root_coppelia) or ($alt_coppelia)";
-        #         "ERROR_MANIPULATION" | job send $parent_job_id
-        #     } else {
-        #         # Ensure usrset.txt exists
-        #         let sys_dir = ($chosen | path join "system")
-        #         let usrset = ($sys_dir | path join "usrset.txt")
-        #         if not ($usrset | path exists) { mkdir $sys_dir | ignore; touch $usrset }
-        #         # Prepare environment vars
-        #         let ld_old = ($env.LD_LIBRARY_PATH? | default "")
-        #         let ld_new = (if ($ld_old | is-empty) { $chosen } else { $"($chosen):($ld_old)" })
-        #         load-env {
-        #             COPPELIASIM_ROOT: $chosen
-        #             LD_LIBRARY_PATH: $ld_new
-        #             QT_QPA_PLATFORM_PLUGIN_PATH: $chosen
-        #         }
-        #         # Attempt PyRep import; install if missing
-        #         let pyrep_test = (bash -c "conda run -n embench_man python -c 'import pyrep'" | complete)
-        #         if $pyrep_test.exit_code != 0 {
-        #             print "[EB-Man] PyRep not found. Attempting local install..."
-        #             let pyrep_src = ($env.PWD | path join "embodiedbench" "envs" "eb_manipulation" "PyRep")
-        #             if ($pyrep_src | path exists) {
-        #                 bash -c $"conda run -n embench_man python -m pip install -e ($pyrep_src)" | ignore
-        #                 let pyrep_retest = (bash -c "conda run -n embench_man python -c 'import pyrep'" | complete)
-        #                 if $pyrep_retest.exit_code != 0 { print "[EB-Man] PyRep import still failing after install." }
-        #             } else {
-        #                 print "[EB-Man] PyRep source directory missing. Please clone stepjam/PyRep.";
-        #             }
-        #         }
-        #         let pyrep_final = (bash -c "conda run -n embench_man python -c 'import pyrep'" | complete)
-        #         if $pyrep_final.exit_code != 0 {
-        #             print "[EB-Man] Aborting EB-Manipulation evaluation due to PyRep import failure.";
-        #             "ERROR_MANIPULATION" | job send $parent_job_id
-        #         } else {
-        #             print $"Running EB-Manipulation evaluation..."
-
-        #             let results = (bash -c $"conda run --no-capture-output -n embench_man python -m embodiedbench.main env=eb-man model_name='($env.MODEL_NAME)' exp_name='($exp_name)' ($env.EXTRA_ARGS) ($env.EXTRA_ARGS_EB_MAN) > '($log_file)' 2>&1" | complete)
-
-        #             if $results.exit_code != 0 {
-        #                 print "[EB-Manipulation] Evaluation encountered errors. Please check the log for details."
-        #                 "ERROR_MANIPULATION" | job send $parent_job_id
-        #             } else {
-        #                 print "[EB-Manipulation] Evaluation completed successfully."
-        #                 "DONE_MANIPULATION" | job send $parent_job_id
-        #             }
-        #         }
-        #     }
-        # }
-
-        # # EB-Navigation ------------------------------------------------------
-        # let navigation_job_id = job spawn {
-        #     let log_file = ($log_dir | path join "EB-Navigation.log")
-        #     print $"Running EB-Navigation evaluation..."
-
-        #     let results = (bash -c $"conda run --no-capture-output -n embench_nav python -m embodiedbench.main env=eb-nav model_name='($env.MODEL_NAME)' exp_name='($exp_name)' ($env.EXTRA_ARGS) ($env.EXTRA_ARGS_EB_NAV) > '($log_file)' 2>&1" | complete)
-
-        #     if $results.exit_code != 0 {
-        #         print "[EB-Navigation] Evaluation encountered errors. Please check the log for details."
-        #         "ERROR_NAVIGATION" | job send $parent_job_id
-        #     } else {
-        #         print "[EB-Navigation] Evaluation completed successfully."
-        #         "DONE_NAVIGATION" | job send $parent_job_id
-        #     }
-        # }
-
-        
         # use jobs mailbox to wait for all done/error signals
         try {
-            # total expected: parallel Alfred + parallel Habitat jobs
-            let total_envs = ($alfred_jobs_count + $habitat_jobs_count)
+            # total expected: parallel Alfred + Habitat + Manipulation + Navigation jobs
+            let total_envs = ($alfred_jobs_count + $habitat_jobs_count + $manipulation_jobs_count + $navigation_jobs_count)
+            print $"Waiting for ($total_envs) evaluation sets to complete..."
 
             mut processed = 0
             mut successes = 0
@@ -604,27 +683,26 @@ def run_basic_evals [
 
                 let msg = job recv
                 match $msg {
-                    {env: 'alfred', status: 'done', set: $s} => {
-                        $processed = $processed + 1
-                        $successes = $successes + 1
-                        print $"[MAILBOX] EB-ALFRED set=($s) success. Progress: ($processed)/($total_envs)"
-                        $"EB-ALFRED:($s)" | save --append $prior_done_file
-                    },
-                    {env: 'alfred', status: 'error', set: $s} => {
-                        $processed = $processed + 1
-                        $failures = $failures + 1
-                        print $"[MAILBOX] EB-ALFRED set=($s) failure. Progress: ($processed)/($total_envs)"
-                    },
-                    {env: 'habitat', status: 'done', set: $s} => {
-                        $processed = $processed + 1
-                        $successes = $successes + 1
-                        print $"[MAILBOX] EB-Habitat set=($s) success. Progress: ($processed)/($total_envs)"
-                        $"EB-Habitat:($s)" | save --append $prior_done_file
-                    },
-                    {env: 'habitat', status: 'error', set: $s} => {
-                        $processed = $processed + 1
-                        $failures = $failures + 1
-                        print $"[MAILBOX] EB-Habitat set=($s) failure. Progress: ($processed)/($total_envs)"
+                    {env: $e, status: $st, set: $s} => {
+                        let human_env = match $e {
+                            'alfred' => 'EB-ALFRED'
+                            'habitat' => 'EB-Habitat'
+                            'manip' => 'EB-Manipulation'
+                            'nav' => 'EB-Navigation'
+                            _ => $e
+                        }
+                        if $st == 'done' {
+                            $processed = $processed + 1
+                            $successes = $successes + 1
+                            print $"[MAILBOX] ($human_env) set=($s) success. Progress: ($processed)/($total_envs)"
+                            $"($human_env):($s)" | save --append $prior_done_file
+                        } else if $st == 'error' {
+                            $processed = $processed + 1
+                            $failures = $failures + 1
+                            print $"[MAILBOX] ($human_env) set=($s) failure. Progress: ($processed)/($total_envs)"
+                        } else {
+                            print $"[MAILBOX][WARN] Unknown status ($st) for env ($human_env) set=($s)"
+                        }
                     },
                     _ => { print $"[WARN] Received unknown message in mailbox: ($msg)" }
                 }
@@ -632,25 +710,26 @@ def run_basic_evals [
 
             if ($failures == 0) and ($successes == $total_envs) {
                 $"ALL DONE OK successes=($successes) failures=($failures)" | save --append $prior_done_file
-                print $"All evaluations completed SUCCESSFULLY. Successes=($successes) Failures=($failures) (markers written to: ($prior_done_file))"
+                print $"All evaluations completed SUCCESSFULLY. Successes=($successes) Failures=($failures) \(markers written to: ($prior_done_file))"
                 # send success completion to supervising batch job
                 {kind: 'exp', exp_name: $exp_name, status: 'success', successes: $successes, failures: $failures} | job send $main_job_id
             } else {
                 $"ALL DONE WITH FAILURES successes=($successes) failures=($failures)" | save --append $prior_done_file
-                print $"Evaluations finished with FAILURES. Successes=($successes) Failures=($failures). Run will NOT be skipped next time. (markers written to: ($prior_done_file))"
+                print $"Evaluations finished with FAILURES. Successes=($successes) Failures=($failures). Run will NOT be skipped next time. \(markers written to: ($prior_done_file))"
                 # send failure completion to supervising batch job
                 {kind: 'exp', exp_name: $exp_name, status: 'failure', successes: $successes, failures: $failures} | job send $main_job_id
             }
         } catch { |err|
             print "Interrupted while waiting for evaluations to complete (likely Ctrl-C). Cleaning up related jobs..."
+            print $err
 
             print "Currently running jobs:"
             job list
 
             for jid in $alfred_job_ids_snapshot { try { job kill $jid } }
             for jid in $habitat_job_ids_snapshot { try { job kill $jid } }
-            # try { job kill $manipulation_job_id }
-            # try { job kill $navigation_job_id }
+            for jid in $manipulation_job_ids_snapshot { try { job kill $jid } }
+            for jid in $navigation_job_ids_snapshot { try { job kill $jid } }
             {kind: 'exp', exp_name: $exp_name, status: 'aborted'} | job send $main_job_id
         }
     }

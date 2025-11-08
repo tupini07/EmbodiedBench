@@ -112,26 +112,26 @@ experiments:
   #     REMOTE_URL: "http://localhost:48001/v1,http://localhost:48002/v1,http://localhost:48003/v1"
 
 
-  # - prefix: "20251106-combined-2-sft_pix_3136_262144_bs1_accum8_gpus8_lr1e-5_cosine0.1_epoch3_freeze_vision-true-proj-true-lm-false_model_ActionCorrection_OneStepPlanLoose_3Retries_WithReasoning_"
-  #   max_tokens: [6144]
-  #   temperature: [0.6, 0.7]
-  #   amlt_job_names:
-  #     - "sharp-sculpin"
-  #     - "driving-seal"
-  #     - "fond-parakeet"
-  #   extra_env:
-  #     REMOTE_URL: "http://localhost:46001/v1,http://localhost:46002/v1,http://localhost:46003/v1"
+  - prefix: "20251106-combined-2-sft_pix_3136_262144_bs1_accum8_gpus8_lr1e-5_cosine0.1_epoch3_freeze_vision-true-proj-true-lm-false_model_ActionCorrection_OneStepPlanLoose_3Retries_WithReasoning_"
+    max_tokens: [6144]
+    temperature: [0.6, 0.7]
+    amlt_job_names:
+      - "sharp-sculpin"
+      - "driving-seal"
+      - "fond-parakeet"
+    extra_env:
+      RUN_MANIPULATION: "1"
+      RUN_NAVIGATION: "1"  
 
 
-  # - prefix: "20251106-gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2"
-  #   max_tokens: [6144]
-  #   temperature: [0.6]
-  #   amlt_job_names:
-  #     - "inspired-panda"
-  #     - "beloved-stingray"
-  #     - "composed-sculpin"
-  #   extra_env:
-  #     REMOTE_URL: "http://localhost:47001/v1,http://localhost:47002/v1,http://localhost:47003/v1"
+  - prefix: "20251106-gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2"
+    max_tokens: [6144]
+    temperature: [0.6]
+    draft: true # this job is done so mark as draft to avoid re-running
+    amlt_job_names:
+      - "inspired-panda"
+      - "beloved-stingray"
+      - "composed-sculpin"
 
 
   - prefix: "20251106-gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2--global_step_35--actor--huggingface"
@@ -141,41 +141,33 @@ experiments:
       - "peaceful-crayfish"
       - "aware-wombat"
       - "artistic-krill"
-    extra_env:
-      REMOTE_URL: "http://localhost:49001/v1,http://localhost:49002/v1,http://localhost:49003/v1"
 
 
-  # - prefix: "20251106-gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2--global_step_30--actor--huggingface"
-  #   max_tokens: [6144, 8192]
-  #   temperature: [0.6]
-  #   amlt_job_names:
-  #     - "prepared-crab"
-  #     - "talented-serval"
-  #     - "robust-kodiak"
-  #   extra_env:
-  #     REMOTE_URL: "http://localhost:50001/v1,http://localhost:50002/v1,http://localhost:50003/v1"
+  - prefix: "20251106-gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2--global_step_30--actor--huggingface"
+    max_tokens: [6144, 8192]
+    temperature: [0.6]
+    amlt_job_names:
+      - "prepared-crab"
+      - "talented-serval"
+      - "robust-kodiak"
 
 
-  # - prefix: "rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128_ActionCorrection_OneStepPlanLoose_3Retries_WithReasoning_"
-  #   max_tokens: [6192]
-  #   temperature: [0.6]
-  #   amlt_job_names:
-  #     - "delicate-python"
-  #     - "top-roughy"
-  #     - "rational-cub"
-  #   extra_env:
-  #     REMOTE_URL: "http://localhost:45001/v1,http://localhost:45002/v1,http://localhost:45003/v1"
-
+  - prefix: "rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128_ActionCorrection_OneStepPlanLoose_3Retries_WithReasoning_"
+    max_tokens: [6192]
+    temperature: [0.6]
+    amlt_job_names:
+      - "delicate-python"
+      - "top-roughy"
+      - "rational-cub"
 
 
   - prefix: "20251107-gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2--global_step_45--ActCorr_1SPLoose_3Ret_WReason_"
     max_tokens: [8192]
     temperature: [0.6]
+    draft: true # this job is done so mark as draft to avoid re-running
     amlt_job_names:
       - sweeping-gecko
       - crucial-doberman
-    extra_env:
-      REMOTE_URL: "http://localhost:51001/v1,http://localhost:51002/v1"
 
 
   - prefix: "20251107-gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2--global_step_40--ActCorr_1SPLoose_3Ret_WReason_"
@@ -184,9 +176,6 @@ experiments:
     amlt_job_names:
       - thorough-rabbit
       - fair-sunbeam
-    extra_env:
-      REMOTE_URL: "http://localhost:52001/v1,http://localhost:52002/v1"
-
 
   - prefix: "baseline-videor1-sft-qwen2.5-vl-7b-instruct"
     max_tokens: [4096]
@@ -195,34 +184,60 @@ experiments:
       - cosmic-flamingo
       - live-jackal
     extra_env:
-      REMOTE_URL: "http://localhost:53001/v1,http://localhost:53002/v1"
       RUN_MANIPULATION: "1"
       RUN_NAVIGATION: "1"  
 
-  # ---------------------------------------------------------------------------------------------------------------------------------------
-  # below are drafts waiting for compute
-  # ---------------------------------------------------------------------------------------------------------------------------------------
-
   - prefix: "baseline-videor1-rl-qwen2.5-vl-7b-instruct"
-    draft: true
     max_tokens: [4096]
     temperature: [0.6]
     amlt_job_names:
-      - 
+      - precious-lacewing
+      - splendid-monarch
     extra_env:
-      REMOTE_URL: "http://localhost:54001/v1,http://localhost:54002/v1"
       RUN_MANIPULATION: "1"
       RUN_NAVIGATION: "1"  
 
   - prefix: "Qwen2.5-7b_NewJsonParsing_ActionCorrection_OneStepPlan_3Retries_WithReasoning_"
-    draft: true
+    # draft: true
     max_tokens: [4096]
     temperature: [0.6]
     amlt_job_names:
-      - 
+      - suited-pika
+      - evolved-skunk
     extra_env:
       EMB_REASONING_MODE: "1"
-      REMOTE_URL: "http://localhost:32001/v1,http://localhost:32002/v1,http://localhost:32003/v1"
       RUN_MANIPULATION: "1"
       RUN_NAVIGATION: "1"  
+
+
+  - prefix: "20251108-combined-5-gated-rm2-step65--actor--huggingface"
+    short_name: combined-5-gated-rm2-step65
+    max_tokens: [8192]
+    temperature: [0.6]
+    amlt_job_names:
+      - "saved-arachnid"
+      - "bursting-chamois"
+    extra_env:
+      RUN_MANIPULATION: "1"
+      RUN_NAVIGATION: "1"  
+
+
+  - prefix: "20251108-combined-5-gated-rm2-step55--actor--huggingface"
+    short_name: combined-5-gated-rm2-step55
+    max_tokens: [8192]
+    temperature: [0.6]
+    amlt_job_names:
+      - "pleasing-crappie"
+      - "accepted-grubworm"
+    extra_env:
+      RUN_MANIPULATION: "1"
+      RUN_NAVIGATION: "1"  
+
+
+  # ---------------------------------------------------------------------------------------------------------------------------------------
+  # below are drafts waiting for compute
+  #  draft: true
+  # ---------------------------------------------------------------------------------------------------------------------------------------
+
+
 

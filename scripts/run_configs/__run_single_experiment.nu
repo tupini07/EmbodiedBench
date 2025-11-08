@@ -21,6 +21,11 @@ def remove-lock [prefix:string] { let lf = (lock-file $prefix); if ($lf | path e
 
 def main [prefix:string] {
     # Determine directory of this script (fallback to current dir if unavailable)
+    
+    # before doing anythin, kill any current jobs and wait. By this point we know we should not have any running jobs with this prefix
+    kill-all-regex $prefix
+    sleep 5sec
+
     const self_path = (path self)
     let dir = (dirname $self_path)
     let yaml_path = ($dir | path join "experiment_specs.yaml")
@@ -46,10 +51,71 @@ def main [prefix:string] {
     let base_env = ($base.extra_env? | default {})
 
     # extra env. Defaults from base, overridden by experiment-specific.
-    let extra_env = ($base_env | merge ($exp.extra_env? | default {}))
+    let exp_extra_env = ($exp.extra_env? | default {})
+    mut extra_env = ($base_env | merge $exp_extra_env)
 
-    let remote_urls = ($extra_env.REMOTE_URL? | default "")
     let amlt_job_names = ($exp.amlt_job_names? | default [])
+    mut remote_urls = ($extra_env.REMOTE_URL? | default "")
+
+    # Auto-generate REMOTE_URL if not provided but amlt_job_names exist
+    if ($remote_urls | str length) == 0 and (($amlt_job_names | length) > 0) {
+        print $"[AUTO-PORT] No REMOTE_URL provided, generating deterministic ports based on prefix hash..."
+        
+        # Generate a deterministic base port from prefix hash (range: 60000-90000)
+        let prefix_sha256: string = ($prefix | hash sha256)
+        let hash_sum: int = (python -c $"print\(sum\(bytearray\(b'($prefix_sha256)')))") | into int
+        let initial_base_port = (60000 + (($hash_sum mod 30000) * 1000 / 1000)) | into int
+        
+        # Retry logic: try up to 10 different base ports (with offset of 100 each)
+        mut ports_found = false
+        mut local_ports = []
+        mut final_base_port = $initial_base_port
+        
+        for attempt in 0..9 {
+            let current_base_port = $initial_base_port + ($attempt * 100)
+            
+            # Generate ports for each amlt job (offset by 1 for each replica)
+            let num_replicas = ($amlt_job_names | length)
+            let candidate_ports = (1..$num_replicas | each {|i| $current_base_port + $i })
+            
+            # Check if any of the generated ports are already in use
+            mut is_any_port_used = false
+            for local_port in $candidate_ports {
+                # Port availability check using lsof
+                # We treat any existing LISTEN socket on the target port as an error to avoid
+                # silently reusing an already-bound forward (or conflicting local service).
+                let lsof_output = (bash -c $"lsof -iTCP:($local_port) -sTCP:LISTEN -Pn 2>/dev/null" | lines)
+                let port_in_use = ($lsof_output | length) > 1
+                if $port_in_use {
+                    print $"[AUTO-PORT] Port ($local_port) already in use \(attempt ($attempt + 1)/10)"
+                    $is_any_port_used = true
+                    break
+                }
+            }
+            
+            if not $is_any_port_used {
+                $ports_found = true
+                $local_ports = $candidate_ports
+                $final_base_port = $current_base_port
+                print $"[AUTO-PORT] Found available ports starting at ($current_base_port) \(attempt ($attempt + 1)/10)"
+                break
+            }
+        }
+        
+        if not $ports_found {
+            print $"(ansi red_bold)Error: Could not find available ports after 10 attempts.\nLast attempted base port: ($final_base_port)\nYou can inspect port usage via: lsof -iTCP -sTCP:LISTEN -Pn(ansi reset)"
+            remove-lock $prefix
+            exit 1
+        }
+
+        $remote_urls = ($local_ports | each {|p| $"http://localhost:($p)/v1" } | str join ",")
+        
+        print $"[AUTO-PORT] Generated REMOTE_URL: ($remote_urls)"
+        
+        # Update extra_env with the generated REMOTE_URL
+        $extra_env = ($extra_env | upsert REMOTE_URL $remote_urls)
+    }
+
     let global_replicates = ($base.replicates? | default 3)
     let global_skip_if_done = ($base.skip_if_done? | default true)
     let global_no_pause = ($base.no_pause? | default false)
@@ -77,6 +143,7 @@ def main [prefix:string] {
 
     # Invoke run_batch (positionals first, then named flags). Avoid line continuations for Nu portability.
     let result = (run_batch $temps $max_tokens_list $extra_env 
+                            --amlt_job_names $amlt_job_names
                             --stop_seqs $stop_seq 
                             --prefix $prefix 
                             --replicates $global_replicates 
