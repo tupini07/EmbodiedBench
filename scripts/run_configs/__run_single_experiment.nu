@@ -19,12 +19,13 @@ def lock-file [prefix:string] { $"running/locks/($prefix).lock" }
 def create-lock [prefix:string] { mkdir running/locks | ignore; $"timestamp=(date now); pid=($nu.pid)" | save -f (lock-file $prefix) }
 def remove-lock [prefix:string] { let lf = (lock-file $prefix); if ($lf | path exists) { rm $lf } }
 
-def main [prefix:string] {
+def main [prefix:string, signal_file?: string] {
     # Determine directory of this script (fallback to current dir if unavailable)
     
-    # before doing anythin, kill any current jobs and wait. By this point we know we should not have any running jobs with this prefix
+    # before doing anything, kill any current jobs with this prefix
+    print $"[CLEANUP] Checking for existing jobs with prefix: ($prefix)"
     kill-all-regex $prefix
-    sleep 5sec
+    sleep 2sec
 
     const self_path = (path self)
     let dir = (dirname $self_path)
@@ -120,7 +121,87 @@ def main [prefix:string] {
     let global_skip_if_done = ($base.skip_if_done? | default true)
     let global_no_pause = ($base.no_pause? | default false)
 
+    # ---------------------------------------------------------------
+    # Start a single Xvfb server for this entire batch (if not in HEADLESS mode)
+    # This avoids spawning one Xvfb per job, which is very slow
+    # ---------------------------------------------------------------
+    mut xvfb_display: string = ""
+    mut xvfb_pid: int = 0
+    
+    let is_headless = ($extra_env.HEADLESS? | default "0") == "1"
+    
+    if not $is_headless {
+        print "[XVFB] Starting shared Xvfb server for batch..."
+        
+        # Find available display number
+        mut display_num = 99
+        mut display_found = false
+        
+        for attempt in 0..20 {
+            let candidate_display = $display_num + $attempt
+            let lock_file = $"/tmp/.X($candidate_display)-lock"
+            
+            if not ($lock_file | path exists) {
+                $display_num = $candidate_display
+                $display_found = true
+                break
+            }
+        }
+        
+        if not $display_found {
+            print $"(ansi red_bold)[XVFB] Could not find available display number after 20 attempts(ansi reset)"
+            remove-lock $prefix
+            exit 1
+        }
+        
+        # Start Xvfb with proper settings for all environments
+        # Navigation needs GLX and render extensions
+        let xvfb_cmd = $"Xvfb :($display_num) -screen 0 1024x768x24 +extension GLX +render -noreset -ac"
+        print $"[XVFB] Starting: ($xvfb_cmd)"
+        
+        # Start Xvfb in background
+        let xvfb_result = (bash -c $"($xvfb_cmd) > /tmp/xvfb_($display_num).log 2>&1 & echo $!" | complete)
+        
+        if $xvfb_result.exit_code != 0 {
+            print $"(ansi red_bold)[XVFB] Failed to start Xvfb server(ansi reset)"
+            remove-lock $prefix
+            exit 1
+        }
+        
+        $xvfb_pid = ($xvfb_result.stdout | str trim | into int)
+        $xvfb_display = $":($display_num)"
+        
+        print $"[XVFB] Started Xvfb server on display ($xvfb_display) with PID ($xvfb_pid)"
+        
+        # Wait for Xvfb to be ready
+        sleep 2sec
+        
+        # Update extra_env with the DISPLAY variable
+        $extra_env = ($extra_env | upsert DISPLAY $xvfb_display)
+        
+        print $"[XVFB] Xvfb ready. All jobs will use DISPLAY=($xvfb_display)"
+    } else {
+        print "[XVFB] HEADLESS mode enabled, skipping Xvfb server startup"
+    }
+
     if (($amlt_job_names | length) > 0) and ($remote_urls | str length) > 0 {
+        # Resume AMLT jobs in parallel (no-op if already running)
+        print $"[AMLT] Resuming ($amlt_job_names | length) jobs for prefix=($prefix)..."
+        let current_job_id = (job id)
+        let resume_job_ids = ($amlt_job_names | each {|job_name|
+            print $"[AMLT] Spawning resume for: ($job_name)"
+            job spawn {
+                amlt resume $job_name
+                "done" | job send $current_job_id
+            }
+        })
+        
+        # Wait for all resume jobs to complete
+        for job_id in $resume_job_ids {
+            job recv | ignore
+        }
+        print $"[AMLT] All jobs resumed."
+
         job spawn {
             # reword all amulet jobs descriptions so they match the prefix. We don't really care about the result of this. It's mainly for bookkeeping.
             with-env {
@@ -148,10 +229,37 @@ def main [prefix:string] {
                             --prefix $prefix 
                             --replicates $global_replicates 
                             --skip_if_done $global_skip_if_done 
-                            --no_pause $global_no_pause)
+                            --no_pause $global_no_pause
+                            --auto_pause_amlt_jobs true)
 
     let status = ($result.status? | default "unknown")
     print $"[DONE] prefix=($prefix) status=($status)"
+    
+    # ---------------------------------------------------------------
+    # Cleanup Xvfb server if we started one
+    # ---------------------------------------------------------------
+    if $xvfb_pid > 0 {
+        print $"[XVFB] Stopping Xvfb server (PID: ($xvfb_pid), DISPLAY: ($xvfb_display))"
+        try {
+            bash -c $"kill ($xvfb_pid) 2>/dev/null || true"
+            print "[XVFB] Xvfb server stopped"
+        } catch {
+            print "[XVFB] Warning: Could not stop Xvfb server (may have already exited)"
+        }
+    }
+    
     remove-lock $prefix
     print $"[LOCK] Removed lock for prefix: ($prefix)"
+    
+    # Write completion status to signal file if provided
+    if $signal_file != null {
+        print $"[NOTIFY] Writing completion status to signal file: ($signal_file)"
+        try {
+            $status | save -f $signal_file
+        } catch {
+            print $"[NOTIFY] Warning: Could not write to signal file"
+        }
+    } else {
+        print $"[NOTIFY] No signal file provided, skipping notification."
+    }
 }
