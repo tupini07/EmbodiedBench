@@ -74,6 +74,9 @@ export def start_ssh_tunnels  [
             print $"REMOTE_URL ($url) is reachable."
         }
     }
+
+    # back to main tab as active
+    # gnome-terminal --active 0
 }
 
 export def run_batch [
@@ -100,9 +103,21 @@ export def run_batch [
     --skip_if_done = true       # by default, don't spawn job if dones file has ALL DONE
     --auto_pause_amlt_jobs = false   # whether to automatically pause amlt jobs upon completion
 ] {
+    # Check if running in Docker mode
+    let is_docker = ($env.EMBODIEDBENCH_DOCKER_MODE? | default "0") == "1"
+    
+    if $is_docker {
+        print "[DOCKER] Running in Docker mode - auto-enabling no_pause and auto_pause_amlt_jobs=false"
+    }
+    
+    # Force no_pause in Docker mode
+    let effective_no_pause = if $is_docker { true } else { $no_pause }
+    # Never pause AMLT jobs in Docker mode (since we don't have AMLT access)
+    let effective_auto_pause = if $is_docker { false } else { $auto_pause_amlt_jobs }
+    
     try {
-        mkdir logs | ignore
-        mkdir running/dones | ignore
+        try { mkdir logs | ignore }
+        try { mkdir running/dones | ignore }
 
         let main_job_id = job id
         
@@ -149,7 +164,7 @@ export def run_batch [
 
                     print $"Started job \(rep ($rep)/($replicates)\) for temperature ($temp) and max tokens ($max_tokens) with Job ID: ($jobid)"
 
-                    if $no_pause {
+                    if $effective_no_pause {
                         sleep 20sec
                     } else { 
                         try {
@@ -226,9 +241,9 @@ export def run_batch [
             print $"Totals -> success: ($success_count), failure: ($failure_count), skipped: ($skipped_count), aborted: ($aborted_count)"
             print "=========================================================="
 
-            # if no failures then offer to stop amulet jobs
-            if ($failure_count == 0 and ($amlt_job_names | length) > 0) {
-                if $auto_pause_amlt_jobs {
+            # if no failures then offer to stop amulet jobs (skip in Docker mode)
+            if (not $is_docker) and ($failure_count == 0 and ($amlt_job_names | length) > 0) {
+                if $effective_auto_pause {
                     print $"(ansi green_bold)All jobs completed successfully with zero failures. Pausing Amulet jobs automatically.(ansi reset)"
                     for job_name in $amlt_job_names {
                         print $"Pausing Amulet job: ($job_name)"
@@ -262,14 +277,18 @@ export def run_batch [
             }
 
             kill-all-regex $prefix
-            exit 1
+            return {status: "error"}
         }
+        
+        # Return success status
+        return {status: "success"}
     } catch { |err|
         # Fallback error handler: attempt regex-based termination of stray processes using the provided prefix
         print "Error during run_batch execution. Attempting regex-based cleanup with prefix pattern."
         print $err
 
         kill-all-regex $prefix
+        return {status: "error"}
     }
 }
 
@@ -280,18 +299,22 @@ export def kill-all-regex [pattern: string] {
         print "[kill-all-regex] Empty pattern provided; nothing to kill."
         return
     }
-    print $"(ansi red_bold)[kill-all-regex] Killing processes whose command matches regex: /($pattern)/ (ansi reset)"
-    let script = $"ps -eo pid,command | grep -E '($pattern)' | grep 'python -m embodiedbench.main' | grep -v grep | awk '{print $1}'"
-    let pids = (bash -c $script | lines | where $it != "")
+    print $"[kill-all-regex] Searching for processes matching: /($pattern)/"
+    
+    let script = $"timeout 5s ps -eo pid,command 2>/dev/null | grep -E '($pattern)' | grep 'python -m embodiedbench.main' | grep -v grep | awk '{print $1}' || true"
+    let pids = (bash -c $script | lines | where $it != "" | where $it != null)
+    
     if ($pids | length) == 0 {
         print "[kill-all-regex] No matching processes found."
         return
     }
+    
+    print $"[kill-all-regex] Found ($pids | length) processes to kill"
     for p in $pids {
         let current_pid = $nu.pid
         if $p == $current_pid { continue }
-        print $"[kill-all-regex] kill ($p)"
-        try { bash -c $"kill ($p)" } catch { print $"[kill-all-regex][WARN] Failed to kill pid ($p)" }
+        print $"[kill-all-regex] Killing PID ($p)"
+        try { bash -c $"kill ($p) 2>/dev/null || true" } catch { print $"[kill-all-regex][WARN] Failed to kill pid ($p)" }
     }
 }
 
@@ -385,6 +408,7 @@ def run_basic_evals [
 
         # ---------------------------------------------------------------
         # Headless toggle: if HEADLESS=1 enable software rendering + unset DISPLAY.
+        # Otherwise, use the DISPLAY variable set by the parent (from shared Xvfb server).
         if (($env.HEADLESS? | default "") == "1") {
             print "[HEADLESS] Enabling software rendering (EGL surfaceless)."
             load-env {
@@ -395,7 +419,7 @@ def run_basic_evals [
             }
             hide-env DISPLAY
         } else {
-            load-env { DISPLAY: ":1" }
+            print $"[DISPLAY] Using shared Xvfb server \(DISPLAY=($env.DISPLAY? | default 'not set'))"
         }
 
         # ---------------------------------------------------------------
@@ -471,7 +495,6 @@ def run_basic_evals [
 
         if ($env.RUN_HABITAT? | default "1") != "1" {
             print "[EB-Habitat] Skipping EB-Habitat evaluations as per RUN_HABITAT!=1."
-            return
         } else {
             let habitat_all_sets = ["base" "common_sense" "complex_instruction" "spatial_relationship" "visual_appearance" "long_horizon"]
             print "[EB-Habitat] Running all evaluation sets." 
@@ -653,6 +676,7 @@ def run_basic_evals [
                 print $"[EB-Navigation] Spawning eval_set='($eval_set)' ..."
                 let jobid = job spawn {
                     let parent_job_id = job id
+                    # AI2-THOR Navigation needs GLX and proper rendering extensions (already set in shared Xvfb)
                     let cmd = $"conda run --no-capture-output -n embench_nav python -m embodiedbench.main env=eb-nav model_name='($env.MODEL_NAME)' exp_name='($exp_name)' eval_sets='[($eval_set)]' ($env.EXTRA_ARGS) ($env.EXTRA_ARGS_EB_NAV) > '($log_file)' 2>&1"
                     let results = (bash -c $cmd | complete)
                     if $results.exit_code != 0 {
@@ -706,12 +730,12 @@ def run_basic_evals [
                         if $st == 'done' {
                             $processed = $processed + 1
                             $successes = $successes + 1
-                            print $"[MAILBOX] ($human_env) set=($s) success. Progress: ($processed)/($total_envs)"
+                            print $"[MAILBOX] ($human_env) set=($s) (ansi green_bold)success(ansi reset). Progress: ($processed)/($total_envs)"
                             $"($human_env):($s)" | save --append $prior_done_file
                         } else if $st == 'error' {
                             $processed = $processed + 1
                             $failures = $failures + 1
-                            print $"[MAILBOX] ($human_env) set=($s) failure. Progress: ($processed)/($total_envs)"
+                            print $"[MAILBOX] ($human_env) set=($s) (ansi red_bold)failure(ansi reset). Progress: ($processed)/($total_envs)"
                         } else {
                             print $"[MAILBOX][WARN] Unknown status ($st) for env ($human_env) set=($s)"
                         }
