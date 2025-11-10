@@ -6,18 +6,33 @@ source "$(conda info --base)/etc/profile.d/conda.sh"
 export EMBODIED_BENCH_ROOT=$(pwd)
 
 
-# # Environment for ```Habitat and Alfred```
-conda env create -f conda_envs/environment.yaml 
+# Environment for ```Habitat and Alfred```
+if ! conda env list | grep -q "^embench "; then
+    echo "Creating embench environment..."
+    conda env create -f conda_envs/environment.yaml
+else
+    echo "embench environment already exists, skipping creation"
+fi
 conda activate embench
 pip install -e .
 
 # Environment for ```EB-Navigation```
-conda env create -f conda_envs/environment_eb-nav.yaml 
+if ! conda env list | grep -q "^embench_nav "; then
+    echo "Creating embench_nav environment..."
+    conda env create -f conda_envs/environment_eb-nav.yaml
+else
+    echo "embench_nav environment already exists, skipping creation"
+fi
 conda activate embench_nav
 pip install -e .
 
 # Environment for ```EB-Manipulation```
-conda env create -f conda_envs/environment_eb-man.yaml 
+if ! conda env list | grep -q "^embench_man "; then
+    echo "Creating embench_man environment..."
+    conda env create -f conda_envs/environment_eb-man.yaml
+else
+    echo "embench_man environment already exists, skipping creation"
+fi
 conda activate embench_man
 pip install -e .
 
@@ -27,8 +42,14 @@ git lfs pull || true
 
 # Install EB-ALFRED
 conda activate embench
-git clone https://huggingface.co/datasets/EmbodiedBench/EB-ALFRED
-mv EB-ALFRED embodiedbench/envs/eb_alfred/data/json_2.1.0
+if [ ! -d embodiedbench/envs/eb_alfred/data/json_2.1.0 ]; then
+    echo "Cloning EB-ALFRED dataset..."
+    git clone https://huggingface.co/datasets/EmbodiedBench/EB-ALFRED
+    mkdir -p embodiedbench/envs/eb_alfred/data
+    mv EB-ALFRED embodiedbench/envs/eb_alfred/data/json_2.1.0
+else
+    echo "EB-ALFRED dataset already exists, skipping download"
+fi
 
 # Install EB-Habitat
 conda activate embench

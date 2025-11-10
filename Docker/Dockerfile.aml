@@ -33,14 +33,22 @@ RUN curl -fsSL https://apt.fury.io/nushell/gpg.key | sudo gpg --dearmor -o /etc/
     sudo apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Set working directory
-# WORKDIR /workspace
+# Copy only the conda environment files (no other project files needed at build time)
+# The actual code will be mounted at runtime
+COPY conda_envs/environment.yaml /tmp/conda_envs/environment.yaml
+COPY conda_envs/environment_eb-nav.yaml /tmp/conda_envs/environment_eb-nav.yaml
+COPY conda_envs/environment_eb-man.yaml /tmp/conda_envs/environment_eb-man.yaml
 
-# Copy the project files
-# COPY . /workspace/
+# Pre-create conda environments (this takes a long time, so we do it at build time)
+# This creates the environments but doesn't install the local package yet (done at runtime)
+RUN conda env create -f /tmp/conda_envs/environment.yaml && \
+    conda env create -f /tmp/conda_envs/environment_eb-nav.yaml && \
+    conda env create -f /tmp/conda_envs/environment_eb-man.yaml && \
+    conda clean -afy && \
+    rm -rf /tmp/conda_envs
 
-# # Run the installation script
-# RUN bash install.sh
+# Set working directory for runtime (where code will be mounted)
+WORKDIR /workspace
 
 # Default command - start bash with conda initialized
 CMD ["/bin/bash", "-l"]
