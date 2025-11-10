@@ -1,13 +1,21 @@
 import cv2
 import copy
+import os
 import embodiedbench.envs.eb_alfred.gen.constants as constants
 import numpy as np
+import atexit
+import signal
+import sys
+import psutil
+import logging
 from collections import Counter, OrderedDict
 from embodiedbench.envs.eb_alfred.env.tasks import get_task
 from ai2thor.controller import Controller
 import embodiedbench.envs.eb_alfred.gen.utils.image_util as image_util
 from embodiedbench.envs.eb_alfred.gen.utils import game_util
 from embodiedbench.envs.eb_alfred.gen.utils.game_util import get_objects_of_type, get_obj_of_type_closest_to_obj
+
+logger = logging.getLogger(__name__)
 
 
 DEFAULT_RENDER_SETTINGS = {'renderImage': True,
@@ -42,6 +50,12 @@ class ThorEnv(Controller):
         # intemediate states for CoolObject Subgoal
         self.cooled_reward = False
         self.reopen_reward = False
+        
+        # Cleanup tracking
+        self._thor_processes = []
+        self._cleanup_registered = False
+        self._my_pid = os.getpid()  # Store our PID for cleanup identification
+        self._register_cleanup_handlers()
 
         print("ThorEnv started.")
 
@@ -587,6 +601,87 @@ class ThorEnv(Controller):
 
         success = True
         return success, event, target_instance_id, '', api_action
+
+    def _find_thor_child_processes(self):
+        """Find all AI2THOR child processes spawned by this controller."""
+        try:
+            current_process = psutil.Process()
+            thor_processes = []
+            
+            # Strategy 1: Check direct children (most reliable)
+            for child in current_process.children(recursive=True):
+                try:
+                    cmdline = ' '.join(child.cmdline())
+                    if 'thor-' in cmdline.lower() or 'ai2thor' in cmdline.lower():
+                        thor_processes.append(child.pid)
+                        logger.info(f"[ThorEnv] Found AI2THOR child process: PID={child.pid}")
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+            
+            # Strategy 2: If no children found, search for orphaned thor processes
+            # that were started recently and match our session context
+            if not thor_processes:
+                logger.warning("[ThorEnv] No child processes found, searching for orphaned thor processes...")
+                my_pid_str = str(self._my_pid)
+                for proc in psutil.process_iter(['pid', 'cmdline', 'create_time', 'environ']):
+                    try:
+                        cmdline = ' '.join(proc.info['cmdline'] or [])
+                        if 'thor-' in cmdline.lower():
+                            # Check if this thor process has our PID in environment or was created very recently
+                            env_vars = proc.info.get('environ', {}) or {}
+                            # Thor processes might have PPID or session info in environment
+                            if any(my_pid_str in str(v) for v in env_vars.values()):
+                                thor_processes.append(proc.info['pid'])
+                                logger.info(f"[ThorEnv] Found orphaned AI2THOR process (fallback): PID={proc.info['pid']}")
+                    except (psutil.NoSuchProcess, psutil.AccessDenied, KeyError):
+                        pass
+            
+            return thor_processes
+        except Exception as e:
+            logger.warning(f"[ThorEnv] Error finding AI2THOR processes: {e}")
+            return []
+
+    def _cleanup_thor_processes(self):
+        """Kill all tracked AI2THOR processes."""
+        thor_pids = self._find_thor_child_processes()
+        
+        if thor_pids:
+            logger.info(f"[ThorEnv] Cleaning up {len(thor_pids)} AI2THOR process(es): {thor_pids}")
+            for pid in thor_pids:
+                try:
+                    process = psutil.Process(pid)
+                    process.kill()
+                    logger.info(f"[ThorEnv] Killed AI2THOR process: PID={pid}")
+                except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
+                    logger.debug(f"[ThorEnv] Could not kill process {pid}: {e}")
+
+    def _register_cleanup_handlers(self):
+        """Register cleanup handlers to ensure AI2THOR processes are killed on exit."""
+        if self._cleanup_registered:
+            return
+            
+        def cleanup():
+            logger.info("[ThorEnv] Cleanup handler triggered")
+            try:
+                self.stop()
+            except:
+                pass
+            self._cleanup_thor_processes()
+        
+        # Register atexit handler
+        atexit.register(cleanup)
+        
+        # Register signal handlers for SIGTERM and SIGINT
+        def signal_handler(signum, frame):
+            logger.info(f"[ThorEnv] Signal {signum} received, cleaning up...")
+            cleanup()
+            sys.exit(0)
+        
+        signal.signal(signal.SIGTERM, signal_handler)
+        signal.signal(signal.SIGINT, signal_handler)
+        
+        self._cleanup_registered = True
+        logger.info("[ThorEnv] Cleanup handlers registered")
 
     @staticmethod
     def bbox_to_mask(bbox):

@@ -123,6 +123,25 @@ class EBHabEnv(gym.Env):
         self.config.habitat.dataset.data_path = os.path.join(os.path.dirname(__file__), 'datasets/{}.pickle'.format(eval_set))
         self.config.habitat.simulator.agents.main_agent.sim_sensors.head_rgb_sensor.height = resolution
         self.config.habitat.simulator.agents.main_agent.sim_sensors.head_rgb_sensor.width = resolution
+        
+        # GPU/CPU selection hack:
+        # By default we used to force CPU (-1). Provide an override via env var EB_HAB_GPU_ID.
+        # Set EB_HAB_GPU_ID to a specific GPU index (e.g. 1) or to -1 to try CPU mode.
+        # Fallback: if no env provided, prefer GPU 0 to avoid unexpected CPU performance hit.
+        # gpu_override = os.environ.get("EB_HAB_GPU_ID")
+        # try:
+        #     if gpu_override is not None and gpu_override.strip() != "":
+        #         self.config.habitat.simulator.habitat_sim_v0.gpu_device_id = int(gpu_override)
+        #     else:
+        #         self.config.habitat.simulator.habitat_sim_v0.gpu_device_id = 0  # default GPU
+        # except ValueError:
+        #     # Invalid override, keep safe fallback
+        #     self.config.habitat.simulator.habitat_sim_v0.gpu_device_id = 0
+
+        self.config.habitat.simulator.habitat_sim_v0.gpu_device_id = -1
+        print("Using habitat_sim gpu_device_id:", self.config.habitat.simulator.habitat_sim_v0.gpu_device_id)
+         
+        # You can also externally restrict visible GPUs with CUDA_VISIBLE_DEVICES before launching.
         self.resolution = resolution
 
         # modify config path to ease data loading
@@ -281,7 +300,8 @@ class EBHabEnv(gym.Env):
         return obs, reward, done, info
 
     def seed(self, seed=None):
-        self.env.seed(seed)
+        # Return underlying env's seed result to match Gym interface expectations.
+        return self.env.seed(seed)
 
     def save_image(self, obs, key='head_rgb'):
         """Save current agent observation as a PNG image."""
