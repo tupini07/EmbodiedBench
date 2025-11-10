@@ -33,11 +33,21 @@ def main [prefix:string, signal_file?: string] {
     let spec = (open $yaml_path)
     let base = ($spec.base_settings)
     let experiments = ($spec.experiments? | default [])
-    if ($experiments | length) == 0 { print (ansi red_bold) + "No experiments defined." + (ansi reset); exit 1 }
+    if ($experiments | length) == 0 { 
+        print $"(ansi red_bold)No experiments defined.(ansi reset)"
+        exit 1 
+    }
 
     let matches = ($experiments | where {|e| ($e.prefix? | default '') == $prefix })
-    if ($matches | length) == 0 { print (ansi red_bold) + $"Prefix not found: ($prefix)" + (ansi reset); exit 1 }
-    if ($matches | length) > 1 { print (ansi red_bold) + $"Multiple experiments with same prefix: ($prefix)" + (ansi reset); exit 1 }
+    if ($matches | length) == 0 { 
+        print $"(ansi red_bold)Prefix not found: ($prefix)(ansi reset)"
+        exit 1 
+    }
+    if ($matches | length) > 1 { 
+        print $"(ansi red_bold)Multiple experiments with same prefix: ($prefix)(ansi reset)"
+        exit 1 
+    }
+
     let exp = ($matches | first)
 
     let lf = (lock-file $prefix)
@@ -117,6 +127,10 @@ def main [prefix:string, signal_file?: string] {
         $extra_env = ($extra_env | upsert REMOTE_URL $remote_urls)
     }
 
+    # if the experiment has an expected model path then set that in the env so we can check later from python code
+    # that we're actually evaluating on the expected checkpoint
+    $extra_env = ($extra_env | upsert EXPECTED_MODEL_PATH ($exp.model_checkpoint? | default ""))
+
     let global_replicates = ($base.replicates? | default 3)
     let global_skip_if_done = ($base.skip_if_done? | default true)
     let global_no_pause = ($base.no_pause? | default false)
@@ -192,15 +206,51 @@ def main [prefix:string, signal_file?: string] {
             print $"[AMLT] Spawning resume for: ($job_name)"
             job spawn {
                 amlt resume $job_name
+                
+                # Wait for this specific job to be running
+                let max_wait_attempts = 300
+                mut is_running = false
+                mut attempt = 0
+                mut was_originally_paused = false
+                
+                while not $is_running and $attempt < $max_wait_attempts {
+                    $attempt = $attempt + 1
+                    sleep 5sec
+                    
+                    let status_output = (amlt status $job_name | complete)
+                    if $status_output.exit_code == 0 {
+                        let status_text = ($status_output.stdout | str downcase)
+                        if ($status_text | str contains "running") and not ($status_text | str contains "paused") {
+                            $is_running = true
+                            print $"[AMLT] Job ($job_name) is now running! ✓"
+                        } else if ($status_text | str contains "paused") {
+                            $was_originally_paused = true
+                            print $"[AMLT] Job ($job_name) still paused... \(attempt ($attempt)/($max_wait_attempts))"
+                        }
+                    }
+                }
+                
+                if not $is_running {
+                    print $"[AMLT] Warning: Job ($job_name) not confirmed running after ($attempt) attempts"
+                }
+
+                # further sleep a bit to ensure readiness
+                if $was_originally_paused {
+                    sleep 30sec
+                } else {
+                    sleep 5sec
+                }
+                
                 "done" | job send $current_job_id
             }
         })
         
-        # Wait for all resume jobs to complete
+        # Wait for all resume jobs to complete (each will have checked its own status)
+        print $"[AMLT] Waiting for all ($amlt_job_names | length) jobs to resume and become running..."
         for job_id in $resume_job_ids {
             job recv | ignore
         }
-        print $"[AMLT] All jobs resumed."
+        print $"[AMLT] All jobs are now running!"
 
         job spawn {
             # reword all amulet jobs descriptions so they match the prefix. We don't really care about the result of this. It's mainly for bookkeeping.
@@ -239,7 +289,7 @@ def main [prefix:string, signal_file?: string] {
     # Cleanup Xvfb server if we started one
     # ---------------------------------------------------------------
     if $xvfb_pid > 0 {
-        print $"[XVFB] Stopping Xvfb server (PID: ($xvfb_pid), DISPLAY: ($xvfb_display))"
+        print $"[XVFB] Stopping Xvfb server \(PID: ($xvfb_pid), DISPLAY: ($xvfb_display))"
         try {
             bash -c $"kill ($xvfb_pid) 2>/dev/null || true"
             print "[XVFB] Xvfb server stopped"

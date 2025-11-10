@@ -22,6 +22,7 @@ from lmdeploy import GenerationConfig, PytorchEngineConfig, pipeline
 from openai import AzureOpenAI, OpenAI
 
 from embodiedbench.utils.duration_logger import DurationLogger
+import time
 
 
 # ---------------------------
@@ -144,24 +145,57 @@ print(f"VLLM_TOP_P: {vllm_top_p}")
 
 if len(remote_url) > 0:
     print(f"Using remote model URL(s): {remote_url}")
-    known_model_names = set()
+    all_known_models = []
+    
+    max_retries = 3
+    retry_delay = 2  # seconds
+    
     for url in remote_url:
-        try:
-            # check /models for every url, and print it out so it stays in the logs
-            model_data = requests.get(f"{url}/models").json()
-            print(f"Model data from {url}:\n{model_data}")
-            known_model_names.add(model_data["data"][0]["root"])
-        except Exception as e:
-            print(f"Error querying model name from {url}: {e}")
+        success = False
+        for attempt in range(max_retries):
+            try:
+                # check /models for every url, and print it out so it stays in the logs
+                model_data = requests.get(f"{url}/models", timeout=10).json()
+                print(f"Model data from {url}:\n{model_data}")
+                all_known_models.append(model_data["data"][0]["root"])
+                success = True
+                break
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    print(f"Attempt {attempt + 1}/{max_retries} failed for {url}: {e}")
+                    print(f"Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                else:
+                    print(f"Error querying model name from {url} after {max_retries} attempts: {e}")
+        
+        if not success:
+            print(f"Failed to connect to {url} after all retry attempts")
+    
+    assert len(all_known_models) == len(remote_url), f"All remote_url endpoints must point to a valid model, but some failed."
 
-    assert (
-        len(known_model_names) == 1
-    ), "All remote_url endpoints must point to the same model_name"
+    known_model_names = set(all_known_models)
+
+    if len(known_model_names) == 0:
+        raise RuntimeError(
+            f"Failed to connect to any remote_url endpoints. "
+            f"Please ensure the model servers are running and accessible at: {remote_url}"
+        )
 
     print(f"Detected model name from remote_url:\n\t{list(known_model_names)[0]}")
 
-    
+    expected_model_path = os.environ.get("EXPECTED_MODEL_PATH", "")
+    if expected_model_path:
+        print(
+            f"EXPECTED_MODEL_PATH is set to: {expected_model_path}, verifying against detected model name..."
+        )
+        current_model_path = list(known_model_names)[0]
 
+        assert (
+            current_model_path.rstrip("/") == expected_model_path.rstrip("/")
+        ), f"Model path mismatch! Expected to find '{expected_model_path}' in '{current_model_path}'"
+
+        print(f"Model path verified successfully.")
+    
 
 class RemoteModel:
     def __init__(
