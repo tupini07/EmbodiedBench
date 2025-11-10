@@ -19,6 +19,73 @@ import re
 import statistics
 
 import pandas as pd
+import yaml
+
+
+def load_experiment_short_names(config_path: Optional[Path] = None) -> Dict[str, str]:
+    """Load short_name mappings from experiment_specs.yaml.
+    
+    Returns a dictionary mapping prefix -> short_name for experiments that define it.
+    """
+    if config_path is None:
+        script_dir = Path(__file__).parent
+        config_path = script_dir / "run_configs" / "experiment_specs.yaml"
+    
+    if not config_path.exists():
+        return {}
+    
+    try:
+        with open(config_path, "r") as f:
+            config = yaml.safe_load(f)
+        
+        short_names = {}
+        experiments = config.get("experiments", [])
+        for exp in experiments:
+            prefix = exp.get("prefix", "")
+            short_name = exp.get("short_name")
+            if prefix and short_name:
+                short_names[prefix] = short_name
+        
+        return short_names
+    except Exception as e:
+        print(f"Warning: Could not load experiment_specs.yaml: {e}")
+        return {}
+
+
+def apply_short_name(exp_name: str, short_name_map: Dict[str, str]) -> str:
+    """Apply short_name mapping if the experiment name starts with a known prefix.
+    
+    If the experiment name starts with a prefix that has a short_name defined,
+    replace the prefix with the short_name. Otherwise, return the original name.
+    
+    Handles two cases:
+    1. Direct match: exp_name starts with prefix
+    2. Model-prefixed match: exp_name has "Qwen2.5-VL-7B-Instruct_" + prefix
+    
+    Adds "__" separator between short_name and remainder if remainder exists.
+    """
+    # Try direct match first
+    for prefix, short_name in short_name_map.items():
+        if exp_name.startswith(prefix):
+            # Replace the prefix with the short_name
+            remainder = exp_name[len(prefix):]
+            if remainder:
+                return short_name + "__" + remainder
+            return short_name
+    
+    # Try with common model prefix stripped
+    model_prefix = "Qwen2.5-VL-7B-Instruct_"
+    if exp_name.startswith(model_prefix):
+        exp_without_model = exp_name[len(model_prefix):]
+        for prefix, short_name in short_name_map.items():
+            if exp_without_model.startswith(prefix):
+                # Replace the prefix with the short_name, keep model prefix
+                remainder = exp_without_model[len(prefix):]
+                if remainder:
+                    return model_prefix + short_name + "__" + remainder
+                return model_prefix + short_name
+    
+    return exp_name
 
 
 def load_summary_json(file_path: Path) -> Dict[str, Any]:
@@ -333,7 +400,7 @@ def format_mean_std(pairs: Optional[tuple], percent: bool = True) -> str:
         return f"{mean:.3f} ± {std:.3f}"
 
 
-def print_aggregated_summary_tables(env_name: str, experiments_data: Dict[str, Dict[str, Path]]):
+def print_aggregated_summary_tables(env_name: str, experiments_data: Dict[str, Dict[str, Path]], short_name_map: Optional[Dict[str, str]] = None):
     """Reworked aggregated summary tables.
 
     New logic:
@@ -347,6 +414,8 @@ def print_aggregated_summary_tables(env_name: str, experiments_data: Dict[str, D
 
     If pandas is available we use it for clearer grouping; otherwise we fall back to pure-python collections.
     """
+    if short_name_map is None:
+        short_name_map = {}
 
     # Collect all dimensions for column ordering
     all_dimensions: Set[str] = set()
@@ -361,7 +430,10 @@ def print_aggregated_summary_tables(env_name: str, experiments_data: Dict[str, D
     clean_pattern = re.compile(r'^(?:Qwen2\.5-VL-7B-Instruct_)|_rep\d+$')
 
     def clean_experiment(exp: str) -> str:
-        return clean_pattern.sub('', exp)
+        # First apply short_name if available
+        exp_with_short = apply_short_name(exp, short_name_map)
+        # Then apply the cleaning pattern
+        return clean_pattern.sub('', exp_with_short)
 
     # Build flat records
     records: List[Dict[str, Any]] = []
@@ -471,7 +543,7 @@ def print_aggregated_summary_tables(env_name: str, experiments_data: Dict[str, D
     print()
 
 
-def print_combined_summary_table(all_results: Dict[str, Dict[str, Dict[str, Path]]]):
+def print_combined_summary_table(all_results: Dict[str, Dict[str, Dict[str, Path]]], short_name_map: Optional[Dict[str, str]] = None):
     """Print a single combined table with all environments, experiments, and dimensions.
     
     Creates one large table with columns:
@@ -482,6 +554,9 @@ def print_combined_summary_table(all_results: Dict[str, Dict[str, Dict[str, Path
     
     Missing dimensions for specific environments are shown as empty cells.
     """
+    if short_name_map is None:
+        short_name_map = {}
+    
     print("## ALL ENVIRONMENTS - COMBINED SUMMARY\n")
     
     # Collect all unique dimensions across all environments
@@ -502,7 +577,9 @@ def print_combined_summary_table(all_results: Dict[str, Dict[str, Dict[str, Path
         experiments_data = all_results[env_name]
         
         for exp_name in sorted(experiments_data.keys()):
-            row = [env_name, exp_name]
+            # Apply short_name mapping if available
+            display_name = apply_short_name(exp_name, short_name_map)
+            row = [env_name, display_name]
             
             invalid_ratios = []
             
@@ -547,6 +624,11 @@ def main():
 
     print(f"Scanning results from: {running_dir}")
 
+    # Load short_name mappings from experiment_specs.yaml
+    short_name_map = load_experiment_short_names()
+    if short_name_map:
+        print(f"Loaded {len(short_name_map)} short_name mappings from experiment_specs.yaml")
+
     # Parse the results structure
     results = parse_results_structure(running_dir)
 
@@ -579,11 +661,11 @@ def main():
     # Print aggregated mean ± std tables
     print("\n# AGGREGATED SUMMARY TABLES - MEAN ± STD OF TASK SUCCESS\n")
     for env_name in sorted(results.keys()):
-        print_aggregated_summary_tables(env_name, results[env_name])
+        print_aggregated_summary_tables(env_name, results[env_name], short_name_map)
 
     # Print combined summary table (all environments in one table)
     print("\n# COMBINED SUMMARY TABLE - ALL ENVIRONMENTS\n")
-    print_combined_summary_table(results)
+    print_combined_summary_table(results, short_name_map)
     
     # # Print individual summary tables (task_success with average invalid action ratio)
     # print("\n# INDIVIDUAL SUMMARY TABLES - TASK SUCCESS WITH AVG INVALID ACTION RATIO\n")
