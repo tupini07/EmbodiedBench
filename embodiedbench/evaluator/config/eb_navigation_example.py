@@ -1,8 +1,10 @@
+import os
+
 examples = [
-'''
+f'''
 Human Instruction : Navigate to the floorlamp and be as close as possible.
 
-Reasoning and reflection: I can see the floorlmap is at left side in front of me, next to the TVStand. Around me is a Cabinet at my left side. Following the guideline, since the floorlamp is at left side, I can approach it\
+Reasoning and reflection: I can see the floorlamp is at left side in front of me, next to the TVStand. Around me is a Cabinet at my left side. Following the guideline, since the floorlamp is at left side, I can approach it\
 by a series of moving forward and left/rightward. Since currently there is an obstacle at my left, I will first move forward twice.
 Executable plans: [[0, Move forward by 0.25], [0, Move forward by 0.25]]
 
@@ -34,7 +36,7 @@ Environment Feedback: Step 14 is executed successfully; Step 15 is executed succ
 Task Success
 '''
 ,
-'''
+f'''
 Human Instruction: Navigate to the computer on the desk and be as close as possible.
 
 Reasoning and reflection: According to your instruction, I first need to locate the target object. I can see that the computer is located in my left front direction, placed on a desk. Next, I analyze the obstacles around me. In front of me, slightly to the right, there is a chair blocking my direct path. To avoid it, I decide to move leftward first, followed by a forward movement to approach the desk.
@@ -69,7 +71,7 @@ Task Success
 
 '''
 ,
-'''
+f'''
 Human Instruction: Navigate to the book and be as close as possible.
 
 Reasoning and reflection: At the moment, I cannot see the book in my current field of view. According to the strategy you provided, I will rotate my view ninety degrees at a time until I locate the target object. Since rotation changes my vision, I will not plan any other actions until the book is visible.

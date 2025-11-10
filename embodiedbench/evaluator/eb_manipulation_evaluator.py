@@ -13,6 +13,9 @@ from embodiedbench.evaluator.config.eb_manipulation_example import vlm_examples_
 from embodiedbench.main import logger
 from embodiedbench.utils.duration_logger import DurationLogger
 
+WRAP_IN_CONTEXT_EXAMPLES_WITH_BOX_TAGS = os.getenv("WRAP_IN_CONTEXT_EXAMPLES_WITH_BOX_TAGS", "0") == "1"
+print("WRAP_IN_CONTEXT_EXAMPLES_WITH_BOX_TAGS: ", WRAP_IN_CONTEXT_EXAMPLES_WITH_BOX_TAGS)
+
 class EB_ManipulationEvaluator():
     def __init__(self, config):
         self.model_name = config['model_name']
@@ -230,6 +233,15 @@ class EB_ManipulationEvaluator():
                 self.log_path = 'running/eb_manipulation/{}/{}/{}'.format(real_model_name, self.config["exp_name"], self.eval_set)
             self.env = EBManEnv(eval_set=self.eval_set, img_size=(self.config['resolution'], self.config['resolution']), down_sample_ratio=self.config["down_sample_ratio"], log_path=self.log_path)
             ic_examples = self.load_demonstration()
+
+            if WRAP_IN_CONTEXT_EXAMPLES_WITH_BOX_TAGS:
+                for _, exlist in ic_examples.items():
+                    for exi in range(len(exlist)):
+                        example_item: str = exlist[exi]
+                        example_pre_output, example_post_output = example_item.split("\nOutput: {\n")
+                        exlist[exi]= example_pre_output+ "\nOutput: <|begin_of_box|>{\n" + example_post_output + "<|end_of_box|>"
+
+
             self.planner = ManipPlanner(model_name=self.model_name,
                                         model_type=self.config['model_type'],
                                         system_prompt=eb_manipulation_system_prompt, 

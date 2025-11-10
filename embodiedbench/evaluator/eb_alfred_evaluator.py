@@ -15,6 +15,10 @@ example_path = os.path.join(os.path.dirname(__file__), 'config/alfred_examples.j
 exploration_example_path = os.path.join(os.path.dirname(__file__), 'config/alfred_long_horizon_examples.json')
 system_prompt = alfred_system_prompt
 
+WRAP_IN_CONTEXT_EXAMPLES_WITH_BOX_TAGS = os.getenv("WRAP_IN_CONTEXT_EXAMPLES_WITH_BOX_TAGS", "0") == "1"
+print("WRAP_IN_CONTEXT_EXAMPLES_WITH_BOX_TAGS: ", WRAP_IN_CONTEXT_EXAMPLES_WITH_BOX_TAGS)
+
+
 class EB_AlfredEvaluator():
     def __init__(self, config):
         self.model_name = config['model_name']
@@ -58,7 +62,15 @@ class EB_AlfredEvaluator():
                                           detection_box=self.config.get('detection_box', False),
                                           resolution=self.config.get('resolution', 500), 
                                           )
+
             examples = json.load(open(example_path, 'r+')) if self.eval_set != 'long_horizon' else json.load(open(exploration_example_path, 'r+'))
+            
+            if WRAP_IN_CONTEXT_EXAMPLES_WITH_BOX_TAGS:
+                for exi in range(len(examples)):
+                    example_item: str = examples[exi]
+                    example_pre_output, example_post_output = example_item.split("\nOutput: {\n")
+                    examples[exi]= example_pre_output+ "\nOutput: <|begin_of_box|>{\n" + example_post_output + "<|end_of_box|>"
+
             model_type = self.config.get('model_type', 'remote')
             self.planner = VLMPlanner(self.model_name, model_type, self.env.language_skill_set, system_prompt, examples, n_shot=self.config['n_shots'], 
                                             obs_key='head_rgb', chat_history=self.config['chat_history'], language_only=self.config['language_only'],

@@ -22,6 +22,15 @@ example_path = os.path.join(os.path.dirname(__file__), 'config/habitat_examples.
 examples = json.load(open(example_path, 'r+'))
 system_prompt = habitat_system_prompt
 
+WRAP_IN_CONTEXT_EXAMPLES_WITH_BOX_TAGS = os.getenv("WRAP_IN_CONTEXT_EXAMPLES_WITH_BOX_TAGS", "0") == "1"
+print("WRAP_IN_CONTEXT_EXAMPLES_WITH_BOX_TAGS: ", WRAP_IN_CONTEXT_EXAMPLES_WITH_BOX_TAGS)
+
+if WRAP_IN_CONTEXT_EXAMPLES_WITH_BOX_TAGS:
+    for exi in range(len(examples)):
+        example_item: str = examples[exi]
+        example_pre_output, example_post_output = example_item.split("\nOutput: {")
+        examples[exi]= example_pre_output+ "\nOutput: <|begin_of_box|>{" + example_post_output + "<|end_of_box|>"
+
 
 class EB_HabitatEvaluator():
     def __init__(self, config):

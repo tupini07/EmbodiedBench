@@ -355,13 +355,6 @@ def fix_json(json_str):
 # We then extract the JSON inside the box tags and feed it to existing
 # json_to_action logic unchanged.
 
-reasoning_suffix = (
-    "\n\nPlease think about this question as if you were a human pondering deeply. "
-    "Engage in an internal dialogue using natural language thought expressions. "
-    "It's encouraged to include self-reflection or verification in the reasoning process. "
-    "Provide your detailed reasoning between the <think></think> tags, and then give your final JSON answer between the <|begin_of_box|><|end_of_box|> tags (do not include anything besides the requested JSON)."
-)
-
 _BOX_JSON_PATTERN = re.compile(r'<\|begin_of_box\|>(.*?)</?\|end_of_box\|>', re.DOTALL)
 
 def extract_box_json(output_text: str):

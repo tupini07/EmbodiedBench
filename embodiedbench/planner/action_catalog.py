@@ -1,10 +1,23 @@
-"""Central action catalog for EmbodiedBench planner post-processing.
+"""Central ALFRED action catalog for EmbodiedBench planner post-processing.
 
-Provides canonical mapping between action IDs and action names for the
-current environments (base set 0-207 plus extended 208-217 variant).
+IMPORTANT SCOPE NOTE
+--------------------
+This catalog enumerates the static, globally referenced ALFRED high-level
+action space (object-centric: find / pick up / open / close / slice, etc.).
+It is used by the plan validation / repair logic ONLY for the `eb-alf`
+environment. The EB-Habitat environment (`eb-hab`) exposes a *dynamic* per-
+episode action list derived from simulator task definitions (navigation,
+pick, place, open, close with instance-specific natural language). Habitat
+actions therefore MUST NOT be canonicalized through this static mapping.
 
-Having a single authoritative source reduces drift between prompt
-enumerations and runtime validation/repair.
+The validator now gates repairs:
+    * eb-alf : full catalog-based semantic repair (name-first precedence)
+    * eb-hab : lightweight field normalization only (no catalog usage)
+
+Having a single authoritative source for ALFRED reduces drift between prompt
+enumerations and runtime validation/repair. Extended tail (208-217) retains
+duplicate semantic entries intentionally for backwards compatibility with
+alternate enumerations.
 """
 from __future__ import annotations
 

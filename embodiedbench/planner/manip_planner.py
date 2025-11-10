@@ -12,7 +12,7 @@ from mimetypes import guess_type
 from embodiedbench.envs.eb_manipulation.eb_man_utils import ROTATION_RESOLUTION, VOXEL_SIZE
 from embodiedbench.planner.remote_model import RemoteModel
 from embodiedbench.planner.custom_model import CustomModel
-from embodiedbench.planner.planner_utils import local_image_to_data_url, template_manip, template_lang_manip, reasoning_suffix, extract_box_json
+from embodiedbench.planner.planner_utils import local_image_to_data_url, template_manip, template_lang_manip, extract_box_json
 from embodiedbench.main import logger
 
 VISUAL_ICL_EXAMPLES_PATH = "embodiedbench/evaluator/config/visual_icl_examples/eb_manipulation"
@@ -377,18 +377,11 @@ class ManipPlanner():
         else:
             obs = observation # input image path
         
-        reasoning_mode = os.getenv("EMB_REASONING_MODE", "0") == "1"
         if self.visual_icl and not self.language_only:
             first_prompt, task_prompt = self.process_prompt_visual_icl(user_instruction, avg_obj_coord, prev_act_feedback=self.episode_act_feedback)
             if 'claude' in self.model_name or 'InternVL' in self.model_name or 'Qwen2-VL' in self.model_name or 'Qwen2.5-VL' in self.model_name:
                 task_prompt += "\n\n"
                 task_prompt = task_prompt + template_lang_manip if self.language_only else task_prompt + template_manip
-
-            if os.getenv("EMB_REASONING_MODE", "0") == "1":
-                task_prompt += reasoning_suffix
-
-            if os.getenv("ONLY_ONE_STEP_PLAN", "0") == "1":
-                task_prompt += "\n\nPlease include only a single action in your output `executable_plan` list."
 
             if len(self.episode_messages) == 0:
                 self.episode_messages = self.get_message_visual_icl(obs, first_prompt, task_prompt, task_variation)
@@ -402,12 +395,6 @@ class ManipPlanner():
             if 'claude' in self.model_name or 'InternVL' in self.model_name or 'Qwen2-VL' in self.model_name or 'Qwen2.5-VL' in self.model_name:
                 task_prompt += "\n\n"
                 task_prompt = task_prompt + template_lang_manip if self.language_only else task_prompt + template_manip
-
-            if os.getenv("EMB_REASONING_MODE", "0") == "1":
-                task_prompt += reasoning_suffix
-
-            if os.getenv("ONLY_ONE_STEP_PLAN", "0") == "1":
-                task_prompt += "\n\nPlease include only a single action in your output `executable_plan` list."
 
             if len(self.episode_messages) == 0:
                 self.episode_messages = self.get_message(obs, full_example_prompt, task_prompt)
@@ -453,7 +440,7 @@ class ManipPlanner():
         
         logger.debug(f"Model Output:\n{out}\n")
         parse_target = out
-        if reasoning_mode:
+        if os.getenv("EMB_REASONING_MODE", "0") == "1":
             box_json = extract_box_json(out)
             if box_json:
                 logger.debug(f"Extracted Box JSON:\n{box_json}\n")

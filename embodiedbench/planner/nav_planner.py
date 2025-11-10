@@ -8,7 +8,7 @@ import json
 # from lmdeploy import pipeline, GenerationConfig, PytorchEngineConfig
 from openai import OpenAI
 from embodiedbench.planner.planner_config.generation_guide import llm_generation_guide, vlm_generation_guide
-from embodiedbench.planner.planner_utils import local_image_to_data_url, truncate_message_prompts, reasoning_suffix, extract_box_json
+from embodiedbench.planner.planner_utils import local_image_to_data_url, truncate_message_prompts, extract_box_json
 # from embodiedbench.planner.eb_navigation.RemoteModel_claude import RemoteModel
 from embodiedbench.planner.remote_model import RemoteModel
 from embodiedbench.planner.custom_model import CustomModel
@@ -278,12 +278,6 @@ You are supposed to output in JSON.{template_lang if self.language_only else tem
         
         prompt = self.process_prompt(user_instruction, prev_act_feedback=self.episode_act_feedback)
 
-        if os.getenv("EMB_REASONING_MODE", "0") == "1":
-            prompt += reasoning_suffix
-
-        if os.getenv("ONLY_ONE_STEP_PLAN", "0") == "1":
-            prompt += "\n\nPlease include only a single action in your output `executable_plan` list."
-
         if self.model_type == 'custom':
             return self.act_custom(prompt, obs)
 
@@ -323,7 +317,6 @@ You are supposed to output in JSON.{template_lang if self.language_only else tem
             )
             
         logger.debug(f"Model Output:\n{out}\n")
-        reasoning_mode = os.getenv("EMB_REASONING_MODE", "0") == "1"
         parse_target = out
 
         action, valid = self.json_to_action(parse_target)

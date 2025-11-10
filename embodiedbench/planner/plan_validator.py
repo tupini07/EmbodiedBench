@@ -249,50 +249,112 @@ def validate_and_repair_plan(raw_json: str) -> Tuple[str, Dict[str, Any]]:
     return json.dumps(obj, ensure_ascii=False), report
 
 
+def _habitat_light_repair(raw_json: str) -> tuple[str, Dict[str, Any]]:
+    """Minimal, non-semantic repair for EB-Habitat plans.
+
+    Per-episode Habitat actions are dynamic natural language phrases not represented
+    in the static ALFRED catalog. We therefore ONLY:
+      * Parse JSON (if fails, return original)
+      * If `executable_plan` is a list of dicts, copy `action_description` ->
+        `action_name` when the latter is missing.
+      * Optionally record these as repairs for transparency.
+      * NEVER mutate `action_id` (IDs are environment-controlled already).
+      * NEVER attempt synonym / canonical mapping.
+
+    Returns (maybe_modified_json, lightweight_report_dict).
+    """
+    report: Dict[str, Any] = {
+        "parse_ok": False,
+        "actions_seen": 0,
+        "repairs": [],
+        "unrecoverable": [],
+    }
+    try:
+        obj = json.loads(raw_json)
+    except Exception as e:
+        report["error"] = f"json_parse_failed: {e}"
+        return raw_json, report
+    report["parse_ok"] = True
+    plan = obj.get("executable_plan")
+    if not isinstance(plan, list):
+        return raw_json, report
+
+    repaired = False
+    for idx, step in enumerate(plan):
+        if not isinstance(step, dict):
+            report["unrecoverable"].append({"index": idx, "reason": "non_dict"})
+            continue
+        report["actions_seen"] += 1
+        # Copy description -> name if missing name and description present.
+        if "action_name" not in step and isinstance(step.get("action_description"), str):
+            step["action_name"] = step["action_description"]
+            repaired = True
+            report["repairs"].append({
+                "index": idx,
+                "type": "add_missing_name_from_description",
+                "value": step["action_name"],
+            })
+        # If both missing, mark unrecoverable but do not drop the step.
+        if "action_name" not in step and "action_description" not in step:
+            report["unrecoverable"].append({"index": idx, "reason": "missing_name_and_description"})
+
+    if repaired:
+        return json.dumps(obj, ensure_ascii=False), report
+    return raw_json, report
+
+
 def maybe_repair(raw_json: str) -> str:
-    """Optionally repair a plan JSON string depending on mode and environment.
+    """Environment-aware plan repair dispatcher.
 
-    Environment gating:
-        Only apply repairs for Habitat and Alfred style environments where
-        the textual action_name <-> numeric action_id catalog exists and
-        semantic correction is meaningful. For navigation (eb-nav) and
-        manipulation (eb-man) environments, action schemas differ (e.g.,
-        pure id lists or continuous vectors) so we skip all repair logic.
+    Scope:
+      * eb-alf : full semantic repair (name-first precedence) via
+                 `validate_and_repair_plan` + ALFRED catalog.
+      * eb-hab : lightweight field normalization only (no catalog usage)
+                 via `_habitat_light_repair`.
+      * others : return original string unchanged.
 
-        The active environment is read from EB_ENV_NAME (set in main.py).
-        Whitelist: {"eb-hab", "eb-alf"}
+    Controlled by PLAN_REPAIR_MODE: off | log | apply (default apply).
     """
     env_name = os.getenv("EB_ENV_NAME", "")
-    if env_name not in {"eb-alf", "eb-hab"}:
-        # Bypass validation entirely for unsupported environments.
-        return raw_json
-    
     mode = os.getenv("PLAN_REPAIR_MODE", "apply").lower()
     if mode not in {"off", "log", "apply"}:
         mode = "apply"
-
     if mode == "off":
         return raw_json
 
-    repaired_json, rep = validate_and_repair_plan(raw_json)
-    if env_name and os.getenv("PLAN_REPAIR_MODE", "apply") != "off":
-        print(f"[plan_validator] env={env_name} mode={mode} parse_ok={rep.get('parse_ok')} actions_seen={rep.get('actions_seen')} repairs={len(rep.get('repairs', []))} unrecoverable={len(rep.get('unrecoverable', []))}")
-        if rep.get("repairs"):
-            for r in rep["repairs"]:
-                print(f"  [plan_validator][repairs] index={r['index']} type={r['type']} detail={ {k:v for k,v in r.items() if k not in ['index','type']} }")
-        if rep.get("unrecoverable"):
-            for u in rep["unrecoverable"]:
-                print(f"  [plan_validator][unrecoverable] index={u['index']} reason={u['reason']} id={u.get('action_id')} name='{u.get('action_name')}'")
-    # Always log a concise summary when there is any mismatch.
+    if env_name == "eb-alf":
+        repaired_json, rep = validate_and_repair_plan(raw_json)
+    elif env_name == "eb-hab":
+        repaired_json, rep = _habitat_light_repair(raw_json)
+    else:
+        # Unsupported environment for any repair.
+        return raw_json
+
+    # Logging (both modes except off which already returned)
+    print(
+        f"[plan_validator] env={env_name} mode={mode} parse_ok={rep.get('parse_ok')} actions_seen={rep.get('actions_seen')} repairs={len(rep.get('repairs', []))} unrecoverable={len(rep.get('unrecoverable', []))}"
+    )
+    if rep.get("repairs"):
+        for r in rep["repairs"]:
+            print(
+                f"  [plan_validator][repairs] index={r['index']} type={r['type']} detail={ {k:v for k,v in r.items() if k not in ['index','type']} }"
+            )
+    if rep.get("unrecoverable"):
+        for u in rep["unrecoverable"]:
+            print(
+                f"  [plan_validator][unrecoverable] index={u['index']} reason={u['reason']} id={u.get('action_id')} name='{u.get('action_name')}'"
+            )
     if rep.get("repairs") or rep.get("unrecoverable"):
         logging.debug(
-            "[plan_validator] mode=%s parse_ok=%s actions=%s repairs=%s unrecoverable=%s",
+            "[plan_validator] mode=%s env=%s parse_ok=%s actions=%s repairs=%s unrecoverable=%s",
             mode,
+            env_name,
             rep.get("parse_ok"),
             rep.get("actions_seen"),
             len(rep.get("repairs", [])),
             len(rep.get("unrecoverable", [])),
         )
+
     if mode == "apply":
         return repaired_json
     return raw_json

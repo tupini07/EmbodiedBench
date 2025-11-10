@@ -10,6 +10,7 @@ from typing import Union
 import anthropic
 import google.generativeai as genai
 import lmdeploy
+import requests
 import typing_extensions as typing
 from azure.identity import (
     AzureCliCredential,
@@ -101,7 +102,6 @@ from embodiedbench.planner.planner_utils import (
     convert_format_2claude,
     convert_format_2gemini,
     fix_json,
-    reasoning_suffix,
 )
 
 """Remote model abstraction.
@@ -120,7 +120,9 @@ comments and boxed-JSON post-processing for Qwen reasoning mode were added.
 
 temperature = float(os.environ.get("REMOTE_MODEL_TEMPERATURE", 0.0))
 max_completion_tokens = int(os.environ.get("REMOTE_MODEL_MAX_TOKENS", 2048))
-remote_url = os.environ.get("remote_url").split(",")
+remote_url = os.environ.get("remote_url", "").split(",")
+if not isinstance(remote_url, list):
+    remote_url = [remote_url]
 if len(remote_url) == 1:
     remote_url = remote_url[0]
 
@@ -130,11 +132,37 @@ stop_seqs = (
     [s.strip() for s in _stop_env.split(",") if s.strip()] if reasoning_mode else None
 )
 
+vllm_frequency_penalty = os.getenv("VLLM_FREQUENCY_PENALTY", None)
+vllm_top_p = os.getenv("VLLM_TOP_P", None)
+
+
 print(f"REMOTE_MODEL_TEMPERATURE: {temperature}")
 print(f"REMOTE_MODEL_MAX_TOKENS: {max_completion_tokens}")
 print(f"REMOTE_MODEL_URL: {remote_url}")
 print(f"EMB_REASONING_MODE: {reasoning_mode}")
 print(f"REMOTE_MODEL_STOP_SEQS: {stop_seqs}")
+print(f"VLLM_FREQUENCY_PENALTY: {vllm_frequency_penalty}")
+print(f"VLLM_TOP_P: {vllm_top_p}")
+
+if len(remote_url) > 0:
+    print(f"Using remote model URL(s): {remote_url}")
+    known_model_names = set()
+    for url in remote_url:
+        try:
+            # check /models for every url, and print it out so it stays in the logs
+            model_data = requests.get(f"{url}/models").json()
+            print(f"Model data from {url}:\n{model_data}")
+            known_model_names.add(model_data["data"][0]["root"])
+        except Exception as e:
+            print(f"Error querying model name from {url}: {e}")
+
+    assert (
+        len(known_model_names) == 1
+    ), "All remote_url endpoints must point to the same model_name"
+
+    print(f"Detected model name from remote_url:\n\t{list(known_model_names)[0]}")
+
+    
 
 
 class RemoteModel:
@@ -587,11 +615,21 @@ class RemoteModel:
         # --------------------------------------------------------------------------------
 
         if os.environ.get("DEBUG_REMOTE_MODEL_INPUTS", "0") == "1":
+            print(
+                f"---------------------\nInput to model: \n\n"
+            )
             messages_to_print = json.loads(json.dumps(message_history))
-            messages_to_print[0]["content"][0]["image_url"]["url"] = "...snip..."
+            try:
+                for msgssc in messages_to_print[0]["content"]:
+                    if "image_url" in msgssc:
+                        print("\n[[...image url here...]]\n")
+                    if "text" in msgssc:
+                        print(f"\n{msgssc['text']}\n")
+            except:
+                print("[[...could not parse message content...]]")
 
             print(
-                f"---------------------\nInput to model: \n\n{json.dumps(messages_to_print, indent=2)}\n\n---------------------------------------------------"
+                f"\n\n---------------------------------------------------"
             )
 
         model: Union[OpenAI, list[OpenAI]] = self.model
@@ -599,6 +637,9 @@ class RemoteModel:
             model = model[self._model_rotation_index % len(model)]
             self._model_rotation_index += 1
 
+
+
+        # todo(atupini) we should probably move all this to a new `call_vllm` method!
         with duration_logger.extend("model inference"):
             response = model.chat.completions.create(
                 model="vllm-model",
@@ -607,6 +648,8 @@ class RemoteModel:
                 temperature=temperature,
                 max_tokens=max_completion_tokens,
                 **({"stop": stop_seqs} if stop_seqs else {}),
+                **({"frequency_penalty": float(vllm_frequency_penalty)} if vllm_frequency_penalty else {}),
+                **({"top_p": float(vllm_top_p)} if vllm_top_p else {}),
             )  # type: ignore
 
         out = response.choices[0].message.content

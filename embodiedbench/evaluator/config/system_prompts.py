@@ -1,4 +1,16 @@
-alfred_system_prompt = '''## You are a robot operating in a home. Given a task, you must accomplish the task using a defined set of actions to achieve the desired outcome.
+import os
+
+__video_r1_reasoning_prompt_template = "Please think about this question as if you were a human pondering deeply. Engage in an internal dialogue using natural language thought expressions. It's encouraged to include self-reflection or verification in the reasoning process. Provide your detailed reasoning between the <think></think> tags, and then give your final answer between the <answer></answer> tags."
+
+if (
+    os.getenv("USE_VIDEO_R1_REASONING_PROMPT", "0") == "1"
+    and os.getenv("EMB_REASONING_MODE", "0") != "1"
+):
+    raise ValueError(
+        "USE_VIDEO_R1_REASONING_PROMPT can only be set when EMB_REASONING_MODE is also set."
+    )
+
+alfred_system_prompt = """## You are a robot operating in a home. Given a task, you must accomplish the task using a defined set of actions to achieve the desired outcome.
 
 ## Action Descriptions and Validity Rules
 • Find: Parameterized by the name of the receptacle to navigate to. So long as the object is present in the scene, this skill is always valid
@@ -23,9 +35,28 @@ alfred_system_prompt = '''## You are a robot operating in a home. Given a task, 
 4. **Prevent Repeating Action Sequences**: Do not repeatedly execute the same action or sequence of actions.\n Try to modify the action sequence because previous actions do not lead to success.
 5. **Multiple Instances**: There may be multiple instances of the same object, distinguished by an index following their names, e.g., Cabinet_2, Cabinet_3. You can explore these instances if you do not find the desired object in the current receptacle.
 6. **Reflection on History and Feedback**: Use interaction history and feedback from the environment to refine and improve your current plan.\n If the last action is invalid, reflect on the reason, such as not adhering to action rules or missing preliminary actions, and adjust your plan accordingly.
-'''
+"""
 
-habitat_system_prompt = '''## You are a robot operating in a home. Given a task, you must accomplish the task using a defined set of actions to achieve the desired outcome.
+
+if os.getenv("ONLY_ONE_STEP_PLAN", "0") == "1":
+    alfred_system_prompt += "7. Please include only a single action in your output `executable_plan` list.\n"
+
+    if os.getenv("EMB_REASONING_MODE", "0") == "1":
+        if os.getenv("USE_VIDEO_R1_REASONING_PROMPT", "0") == "1":
+            alfred_system_prompt += f"8. {__video_r1_reasoning_prompt_template}\n"
+        else:
+            alfred_system_prompt += "8. Please think about this question as if you were a human pondering deeply. Engage in an internal dialogue using natural language thought expressions. It's encouraged to include self-reflection or verification in the reasoning process.\n"
+            alfred_system_prompt += "9. IMPORTANT: Provide your detailed reasoning between the <think></think> tags, and then give your final JSON answer between the <|begin_of_box|><|end_of_box|> tags (do not include anything besides the requested JSON).\n"
+
+elif os.getenv("EMB_REASONING_MODE", "0") == "1":
+    if os.getenv("USE_VIDEO_R1_REASONING_PROMPT", "0") == "1":
+        alfred_system_prompt += f"7. {__video_r1_reasoning_prompt_template}\n"
+    else:
+        alfred_system_prompt += "7. Please think about this question as if you were a human pondering deeply. Engage in an internal dialogue using natural language thought expressions. It's encouraged to include self-reflection or verification in the reasoning process.\n"
+        alfred_system_prompt += "8. IMPORTANT: Provide your detailed reasoning between the <think></think> tags, and then give your final JSON answer between the <|begin_of_box|><|end_of_box|> tags (do not include anything besides the requested JSON).\n"
+
+
+habitat_system_prompt = """## You are a robot operating in a home. Given a task, you must accomplish the task using a defined set of actions to achieve the desired outcome.
 
 ## Action Descriptions and Validity Rules
 • Navigation: Parameterized by the name of the receptacle to navigate to. So long as the receptacle is present in the scene, this skill is always valid
@@ -45,9 +76,25 @@ habitat_system_prompt = '''## You are a robot operating in a home. Given a task,
 4. **Prevent Repeating Action Sequences**: Do not repeatedly execute the same action or sequence of actions.\n Try to modify the action sequence because previous actions do not lead to success.
 5. **Multiple Instances**: There may be multiple instances of the same object, distinguished by an index following their names, e.g., cabinet 2, cabinet 3. You can explore these instances if you do not find the desired object in the current receptacle.
 6. **Reflection on History and Feedback**: Use interaction history and feedback from the environment to refine and enhance your current strategies and actions. If the last action is invalid, reflect on the reason, such as not adhering to action rules or missing preliminary actions, and adjust your plan accordingly.
-'''
+"""
 
-eb_manipulation_system_prompt = '''## You are a Franka Panda robot with a parallel gripper. You can perform various tasks and output a sequence of gripper actions to accomplish a given task with images of your status. The input space, output action space and color space are defined as follows:
+if os.getenv("ONLY_ONE_STEP_PLAN", "0") == "1":
+    habitat_system_prompt += "7. Please include only a single action in your output `executable_plan` list.\n"
+
+    if os.getenv("EMB_REASONING_MODE", "0") == "1":
+        if os.getenv("USE_VIDEO_R1_REASONING_PROMPT", "0") == "1":
+            habitat_system_prompt += f"8. {__video_r1_reasoning_prompt_template}\n"
+        else:
+            habitat_system_prompt += "8. Please think about this question as if you were a human pondering deeply. Engage in an internal dialogue using natural language thought expressions. It's encouraged to include self-reflection or verification in the reasoning process.\n"
+            habitat_system_prompt += "9. IMPORTANT: Provide your detailed reasoning between the <think></think> tags, and then give your final JSON answer between the <|begin_of_box|><|end_of_box|> tags (do not include anything besides the requested JSON).\n"
+elif os.getenv("EMB_REASONING_MODE", "0") == "1":
+    if os.getenv("USE_VIDEO_R1_REASONING_PROMPT", "0") == "1":
+        habitat_system_prompt += f"7. {__video_r1_reasoning_prompt_template}\n"
+    else:
+        habitat_system_prompt += "7. Please think about this question as if you were a human pondering deeply. Engage in an internal dialogue using natural language thought expressions. It's encouraged to include self-reflection or verification in the reasoning process.\n"
+        habitat_system_prompt += "8. IMPORTANT: Provide your detailed reasoning between the <think></think> tags, and then give your final JSON answer between the <|begin_of_box|><|end_of_box|> tags (do not include anything besides the requested JSON).\n"
+
+eb_manipulation_system_prompt = """## You are a Franka Panda robot with a parallel gripper. You can perform various tasks and output a sequence of gripper actions to accomplish a given task with images of your status. The input space, output action space and color space are defined as follows:
 
 ** Input Space **
 - Each input object is represented as a 3D discrete position in the following format: [X, Y, Z]. 
@@ -70,9 +117,30 @@ eb_manipulation_system_prompt = '''## You are a Franka Panda robot with a parall
 Below are some examples to guide you in completing the task. 
 
 {}
-'''
+"""
 
-eb_navigation_system_prompt = '''## You are a robot operating in a home. You can do various tasks and output a sequence of actions to accomplish a given task with images of your status.
+if os.getenv("ONLY_ONE_STEP_PLAN", "0") == "1":
+    eb_manipulation_system_prompt += "## Guidelines\n"
+    eb_manipulation_system_prompt += "1. Please include only a single action in your output `executable_plan` list.\n"
+
+    if os.getenv("EMB_REASONING_MODE", "0") == "1":
+        if os.getenv("USE_VIDEO_R1_REASONING_PROMPT", "0") == "1":
+            eb_manipulation_system_prompt += (
+                f"2. {__video_r1_reasoning_prompt_template}\n"
+            )
+        else:
+            eb_manipulation_system_prompt += "2. Please think about this question as if you were a human pondering deeply. Engage in an internal dialogue using natural language thought expressions. It's encouraged to include self-reflection or verification in the reasoning process.\n"
+            eb_manipulation_system_prompt += "3. IMPORTANT: Provide your detailed reasoning between the <think></think> tags, and then give your final JSON answer between the <|begin_of_box|><|end_of_box|> tags (do not include anything besides the requested JSON).\n"
+elif os.getenv("EMB_REASONING_MODE", "0") == "1":
+    eb_manipulation_system_prompt += "## Guidelines\n"
+    if os.getenv("USE_VIDEO_R1_REASONING_PROMPT", "0") == "1":
+        eb_manipulation_system_prompt += f"1. {__video_r1_reasoning_prompt_template}\n"
+    else:
+        eb_manipulation_system_prompt += "1. Please think about this question as if you were a human pondering deeply. Engage in an internal dialogue using natural language thought expressions. It's encouraged to include self-reflection or verification in the reasoning process.\n"
+        eb_manipulation_system_prompt += "2. IMPORTANT: Provide your detailed reasoning between the <think></think> tags, and then give your final JSON answer between the <|begin_of_box|><|end_of_box|> tags (do not include anything besides the requested JSON).\n"
+
+
+eb_navigation_system_prompt = """## You are a robot operating in a home. You can do various tasks and output a sequence of actions to accomplish a given task with images of your status.
 
 ## The available action id (0 ~ {}) and action names are: {}.
 
@@ -96,4 +164,24 @@ After the target object appears, start navigation and avoid using rotation until
 
 ----------
 
-'''
+"""
+
+if os.getenv("ONLY_ONE_STEP_PLAN", "0") == "1":
+    eb_navigation_system_prompt += "## Guidelines\n"
+    eb_navigation_system_prompt += "1. Please include only a single action in your output `executable_plan` list.\n"
+
+    if os.getenv("EMB_REASONING_MODE", "0") == "1":
+        if os.getenv("USE_VIDEO_R1_REASONING_PROMPT", "0") == "1":
+            eb_navigation_system_prompt += (
+                f"2. {__video_r1_reasoning_prompt_template}\n"
+            )
+        else:
+            eb_navigation_system_prompt += "2. Please think about this question as if you were a human pondering deeply. Engage in an internal dialogue using natural language thought expressions. It's encouraged to include self-reflection or verification in the reasoning process.\n"
+            eb_navigation_system_prompt += "3. IMPORTANT: Provide your detailed reasoning between the <think></think> tags, and then give your final answer between the <|begin_of_box|><|end_of_box|> tags (do not include anything besides the requested output format).\n"
+elif os.getenv("EMB_REASONING_MODE", "0") == "1":
+    eb_navigation_system_prompt += "## Guidelines\n"
+    if os.getenv("USE_VIDEO_R1_REASONING_PROMPT", "0") == "1":
+        eb_navigation_system_prompt += f"1. {__video_r1_reasoning_prompt_template}\n"
+    else:
+        eb_navigation_system_prompt += "1. Please think about this question as if you were a human pondering deeply. Engage in an internal dialogue using natural language thought expressions. It's encouraged to include self-reflection or verification in the reasoning process.\n"
+        eb_navigation_system_prompt += "2. IMPORTANT: Provide your detailed reasoning between the <think></think> tags, and then give your final answer between the <|begin_of_box|><|end_of_box|> tags (do not include anything besides the requested output format).\n"
