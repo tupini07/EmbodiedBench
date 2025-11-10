@@ -1,0 +1,15 @@
+# Based on aml_run_embench.yaml ignore list
+.vagrant/
+embodiedbench.egg-info/
+embodiedbench/envs/eb_manipulation/amsolver.egg-info/
+embodiedbench/envs/eb_manipulation/CoppeliaSim_Pro_V4_1_0_Ubuntu20_04/
+embodiedbench/envs/eb_habitat/data/
+archive/
+running/
+logs/
+data/
+habitat-lab/
+outputs/
+yolo11n.pt
+embodiedbench/envs/eb_manipulation/PyRep/
+docs/

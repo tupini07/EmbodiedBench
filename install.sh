@@ -22,8 +22,8 @@ conda activate embench_man
 pip install -e .
 
 # Install Git LFS
-git lfs install
-git lfs pull
+git lfs install || true
+git lfs pull || true
 
 # Install EB-ALFRED
 conda activate embench
