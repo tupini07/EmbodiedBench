@@ -1,0 +1,46 @@
+# FROM pytorch/pytorch:2.7.1-cuda12.6-cudnn9-devel
+FROM singularitybase.azurecr.io/base/job/pytorch/acpt-torch2.7.1-py3.10-cuda12.6-ubuntu22.04:20250727T115225811
+# FROM amlt-sing/acpt-torch2.7.1-py3.10-cuda12.6-ubuntu22.04
+
+# Set environment to non-interactive to prevent prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Pre-configure keyboard settings to prevent interactive prompts
+RUN echo "keyboard-configuration keyboard-configuration/layout select English (US)" | sudo debconf-set-selections && \
+    echo "keyboard-configuration keyboard-configuration/layoutcode string us" | sudo debconf-set-selections
+
+# Update package lists and install system dependencies
+RUN sudo apt-get update && \
+    sudo apt-get install -yq libc6-dev libgdiplus libx11-dev libxcursor-dev libxrandr-dev \
+        libxi-dev libgl1-mesa-dev libglu1-mesa-dev ca-certificates curl git && \
+    sudo apt-get install -yq libxss1 libgconf-2-4 libxtst6 libxrandr2 libasound2 libpangocairo-1.0-0 \
+        libatk1.0-0 libgtk-3-0 libgdk-pixbuf2.0-0 xvfb vulkan-tools mesa-utils pciutils && \
+    sudo apt-get install -yq mono-runtime mono-complete && \
+    sudo apt-get install -yq neovim && \
+    sudo apt-get install -yq ubuntu-desktop && \
+    sudo apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Accept conda TOS
+RUN conda config --add channels https://repo.anaconda.com/pkgs/main && \
+    conda config --add channels https://repo.anaconda.com/pkgs/r
+
+# Install nushell
+RUN curl -fsSL https://apt.fury.io/nushell/gpg.key | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/fury-nushell.gpg && \
+    echo "deb https://apt.fury.io/nushell/ /" | sudo tee /etc/apt/sources.list.d/fury.list && \
+    sudo apt-get update && \
+    sudo apt-get install -y nushell && \
+    sudo apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+# WORKDIR /workspace
+
+# Copy the project files
+# COPY . /workspace/
+
+# # Run the installation script
+# RUN bash install.sh
+
+# Default command - start bash with conda initialized
+CMD ["/bin/bash", "-l"]

@@ -98,6 +98,7 @@ export def run_batch [
     --stop_seqs:string = "</answer>",
     --prefix:string = "",      # optional prefix for run_name; also used for filtering jobs in polling/cleanup
     --skip_if_done = true       # by default, don't spawn job if dones file has ALL DONE
+    --auto_pause_amlt_jobs = false   # whether to automatically pause amlt jobs upon completion
 ] {
     try {
         mkdir logs | ignore
@@ -227,15 +228,26 @@ export def run_batch [
 
             # if no failures then offer to stop amulet jobs
             if ($failure_count == 0 and ($amlt_job_names | length) > 0) {
-                let answer = input $"(ansi green_bold)All jobs completed successfully with zero failures. Do you want me to stop the Amulet jobs? \(y/[n])(ansi reset)"
-                if $answer == "y" or $answer == "Y" {
+                if $auto_pause_amlt_jobs {
+                    print $"(ansi green_bold)All jobs completed successfully with zero failures. Pausing Amulet jobs automatically.(ansi reset)"
                     for job_name in $amlt_job_names {
                         print $"Pausing Amulet job: ($job_name)"
                         bash -c $'amlt pause ($job_name)'
                     }
                     print $"(ansi green_bold)Amulet jobs paused.(ansi reset)"
+
                 } else {
-                    print $"(ansi yellow_bold)Amulet jobs left running as per user choice.(ansi reset)"
+                    let answer = input $"(ansi green_bold)All jobs completed successfully with zero failures. Do you want me to stop the Amulet jobs? \(y/[n])(ansi reset)"
+                    if $answer == "y" or $answer == "Y" {
+                        for job_name in $amlt_job_names {
+                            print $"Pausing Amulet job: ($job_name)"
+                            bash -c $'amlt pause ($job_name)'
+                        }
+                        print $"(ansi green_bold)Amulet jobs paused.(ansi reset)"
+                    } else {
+                        print $"(ansi yellow_bold)Amulet jobs left running as per user choice.(ansi reset)"
+                    }
+
                 }
             }
 
