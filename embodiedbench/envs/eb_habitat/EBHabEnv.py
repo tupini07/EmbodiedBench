@@ -352,19 +352,19 @@ if __name__ == '__main__':
     env = EBHabEnv(eval_set='base')
     obs = env.reset()
     print([(i, name) for i, name in enumerate(env.language_skill_set)])
-    for _ in range(30):
-        env.save_image(obs)
-        action = int(input('action id: ')) #env.action_space.sample()
-        if action in env.language_skill_set:
-            action = env.language_skill_set.index(action)
-        else:
-            action = int(action)
-            if action < 0:
-                break
+    # for _ in range(30):
+    #     env.save_image(obs)
+    #     action = int(input('action id: ')) #env.action_space.sample()
+    #     if action in env.language_skill_set:
+    #         action = env.language_skill_set.index(action)
+    #     else:
+    #         action = int(action)
+    #         if action < 0:
+    #             break
 
-        obs_new, reward, done, info = env.step(action)
-        print(reward, done, info)
-        env.save_image(obs_new)
-        if done:
-            break
+    #     obs_new, reward, done, info = env.step(action)
+    #     print(reward, done, info)
+    #     env.save_image(obs_new)
+    #     if done:
+    #         break
     env.close()

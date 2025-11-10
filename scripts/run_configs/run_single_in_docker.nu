@@ -85,6 +85,8 @@ def main [
     
     print $"[DOCKER] Constructed REMOTE_URL: ($remote_urls)"
     $extra_env = ($extra_env | upsert REMOTE_URL $remote_urls)
+    $extra_env = ($extra_env | upsert remote_url $remote_urls)
+
     
     # Add Docker mode flag to environment
     $extra_env = ($extra_env | upsert EMBODIEDBENCH_DOCKER_MODE "1")
@@ -113,15 +115,28 @@ def main [
     
     print $"[RUN] Starting batch execution..."
     
-    # Call run_batch directly (no spawning new terminals)
+	let xvfb_cmd = $"Xvfb :1 -screen 0 1024x768x24 +extension GLX +render -noreset -ac"
+	print $"[XVFB] Starting: ($xvfb_cmd)"
+	
+	# Start Xvfb in background
+	let xvfb_result = (bash -c $"($xvfb_cmd) > /tmp/xvfb_42.log 2>&1 & echo $!" | complete)
+
+	$env.DISPLAY = ":1"
+
+	# first, ensure that everything is set up properly (assets downloaded)
+	^conda run --no-capture-output -n embench python -m embodiedbench.envs.eb_alfred.EBAlfEnv
+	^conda run --no-capture-output -n embench python -m embodiedbench.envs.eb_habitat.EBHabEnv
+	^conda run --no-capture-output -n embench_nav python -m embodiedbench.envs.eb_navigation.EBNavEnv
+	^conda run --no-capture-output -n embench_man python -m embodiedbench.envs.eb_manipulation.EBManEnv
+
     let result = (run_batch $temps $max_tokens_list $extra_env 
-                            --amlt_job_names []
-                            --stop_seqs $stop_seq 
-                            --prefix $prefix 
-                            --replicates $global_replicates 
-                            --skip_if_done $global_skip_if_done 
-                            --no_pause true
-                            --auto_pause_amlt_jobs false)
+								--amlt_job_names []
+								--stop_seqs $stop_seq 
+								--prefix $prefix 
+								--replicates $global_replicates 
+								--skip_if_done $global_skip_if_done 
+								--no_pause true
+								--auto_pause_amlt_jobs false)
     
     let status = ($result.status? | default "unknown")
     print ""

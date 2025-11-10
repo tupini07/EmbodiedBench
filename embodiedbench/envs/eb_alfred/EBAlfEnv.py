@@ -416,24 +416,24 @@ if __name__ == "__main__":
     env = EBAlfEnv(eval_set='base', down_sample_ratio=1.0, selected_indexes=[])
     env.reset()
     print([(i, name) for i, name in enumerate(env.language_skill_set)])
-    for _ in range(30):
-        # Select  action
-        action = int(input('action id: ')) #env.action_space.sample()
-        if action in env.language_skill_set:
-            action = env.language_skill_set.index(action)
-        else:
-            action = int(action)
-            if action < 0:
-                break
+    # for _ in range(30):
+    #     # Select  action
+    #     action = int(input('action id: ')) #env.action_space.sample()
+    #     if action in env.language_skill_set:
+    #         action = env.language_skill_set.index(action)
+    #     else:
+    #         action = int(action)
+    #         if action < 0:
+    #             break
         
-        print(env.language_skill_set[action])
+    #     print(env.language_skill_set[action])
         
-        # Execute action
-        obs, reward, done, info = env.step(action)
-        print(reward, done, info)
-        # Optional rendering and image saving
-        env.save_image()
-        if done:
-            break
+    #     # Execute action
+    #     obs, reward, done, info = env.step(action)
+    #     print(reward, done, info)
+    #     # Optional rendering and image saving
+    #     env.save_image()
+    #     if done:
+    #         break
     env.close()
 
