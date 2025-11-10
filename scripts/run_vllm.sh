@@ -4,7 +4,29 @@
 PORT=${1:-43289}
 
 # Qwen2.5-VL-7B-Instruct
+# Qwen2.5-7b_NewJsonParsing_ActionCorrection_OneStepPlan_3Retries_WithReasoning_
 # MODEL_CHECKPOINT="Qwen/Qwen2.5-VL-7B-Instruct"
+
+# 20251109-total-gated-combined-5-rl-step-55
+# MODEL_CHECKPOINT="/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-5-reward-videor1-images-pxmc-verifier-forced-reasoning-glm4.5/total-gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_55/actor/huggingface/"
+
+# 20251109-combined-9-sft-baseline
+# MODEL_CHECKPOINT="/mnt/reuben_models/projects/reubenprojects/magma-reasoning/sft-model-weights/combined/sing/single-combined-9-sft_pix_3136_262144_bs2_accum16_gpus8_lr1e-5_cosine0.1_epoch3_freeze_vision-true-proj-true-lm-false_model/"
+
+# 20251109-combined-8-sft-baseline
+# MODEL_CHECKPOINT="/mnt/reuben_models/projects/reubenprojects/magma-reasoning/sft-model-weights/combined/sing/single-combined-8-sft_pix_3136_262144_bs2_accum16_gpus8_lr1e-5_cosine0.1_epoch3_freeze_vision-true-proj-true-lm-false_model/"
+
+# 20251109-combined-7-sft-baseline
+# MODEL_CHECKPOINT="/mnt/reuben_models/projects/reubenprojects/magma-reasoning/sft-model-weights/combined/sing/single-combined-7-sft_pix_3136_262144_bs2_accum16_gpus8_lr1e-5_cosine0.1_epoch3_freeze_vision-true-proj-true-lm-false_model/"
+
+# 20251108-combined-5-total-gated-rm2-step20--actor--huggingface
+# MODEL_CHECKPOINT="/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-5-reward-videor1-images-pxmc-verifier-forced-reasoning-glm4.5/total-gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_20/actor/huggingface/"
+
+# 20251108-combined-5-gated-rm2-step55--actor--huggingface
+# MODEL_CHECKPOINT="/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-5-reward-videor1-images-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_55/actor/huggingface/"
+
+# 20251108-combined-5-gated-rm2-step65--actor--huggingface
+# MODEL_CHECKPOINT="/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-5-reward-videor1-images-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_65/actor/huggingface/"
 
 # Script: baseline-videor1-sft-qwen2.5-vl-7b-instruct
 # MODEL_CHECKPOINT="/mnt/reuben_models/projects/reubenprojects/public_pretrained_weights/videor1-Qwen2.5-VL-7B-Instruct/"
