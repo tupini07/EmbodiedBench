@@ -303,13 +303,13 @@ def main [prefix:string, signal_file?: string] {
     
     # Write completion status to signal file if provided
     if $signal_file != null {
-        print $"[NOTIFY] Writing completion status to signal file: ($signal_file)"
+        print $"(ansi blue)[NOTIFY](ansi reset) Writing completion status to signal file: (ansi green)($signal_file)(ansi reset)"
         try {
             $status | save -f $signal_file
         } catch {
-            print $"[NOTIFY] Warning: Could not write to signal file"
+            print $"(ansi blue)[NOTIFY](ansi reset) Warning: Could not write to signal file"
         }
     } else {
-        print $"[NOTIFY] No signal file provided, skipping notification."
+        print $"(ansi blue)[NOTIFY](ansi reset) No signal file provided, skipping notification."
     }
 }

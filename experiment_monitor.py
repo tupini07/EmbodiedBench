@@ -68,6 +68,11 @@ def get_running_processes() -> Dict[str, List[Dict[str, Any]]]:
             if '__run_single_experiment.nu' not in line:
                 continue
             
+            # Additional paranoid check: verify the process is associated with a pts (pseudo-terminal)
+            # This helps catch zombie processes that aren't actually in a gnome-terminal
+            if 'pts/' not in line:
+                continue
+            
             # Parse the command line to extract the experiment prefix
             # Example: nu /path/to/__run_single_experiment.nu 20251108-combined-5-total-gated-rm2-step20--actor--huggingface /path/to/signal.file
             # The prefix is the first argument after __run_single_experiment.nu

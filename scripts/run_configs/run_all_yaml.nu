@@ -138,7 +138,23 @@ def is-prefix-running [prefix:string] {
 		($line | bash -c $"grep -E '($pattern)'" | complete | get exit_code) == 0
 	})
 	
-	($matching_lines | length) > 0
+	if ($matching_lines | length) == 0 {
+		return false
+	}
+	
+	# Additional paranoid check: verify the process is associated with a pts (pseudo-terminal)
+	# This helps catch zombie processes that aren't actually in a gnome-terminal
+	# ps output format has TTY as the second column (e.g., "pts/5", "pts/6")
+	let has_terminal = ($matching_lines | any { |line|
+		# Check if line contains pts/N pattern (indicates a terminal session)
+		($line | str contains "pts/")
+	})
+
+	if not $has_terminal {
+		print $"(ansi yellow)[WARNING] Found process for prefix '($prefix)' but no associated terminal session. This may indicate a zombie process.(ansi reset)"
+	}
+	
+	$has_terminal
 }
 
 def count-running-jobs [] {
@@ -191,7 +207,7 @@ def gc-stale-locks [] {
 		let running = (is-prefix-running $basename)
 		if not $running {
 			# If not running anymore, remove lock regardless; optional check for done marker.
-			print $"[GC] Removing stale lock for prefix: ($basename)"
+			print $"[GC] Removing stale lock for prefix: (ansi green)($basename)(ansi reset)"
 			try { rm $lf.name } catch { }
 		}
 	}
