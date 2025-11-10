@@ -1,0 +1,207 @@
+description: Run Embodiedbench
+
+target:
+  service: sing
+  # name: palisades24
+  # name: palisades26
+  name: palisades27
+  # name: msrresrchvc
+  # name: msrresrchbasicvc
+  # name: msrresrchlabbasic # <- this is the one that has a bunch of v100s
+  workspace_name: atupinirgws
+
+environment:  
+  registry: atupinirgacr.azurecr.io
+  # image: embodiedbenchrunner:latest
+  image: embodiedbenchrunner-without-install:latest
+  setup:
+    - conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
+    - conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+
+
+storage:
+  magmathor:
+    storage_account_name: magmardata
+    container_name: magmathor
+  magmar_public:
+    storage_account_name: magmardata
+    container_name: public
+  vlp_datasets:
+    storage_account_name: vlpdatasets
+    container_name: data
+  reuben_models:
+    storage_account_name: reubenprojects
+    container_name: model
+  atupinirgsa_data:
+    storage_account_name: atupinirgsa
+    container_name: data
+
+# data:
+#   local_dir: ../data/output/1__openai_extracted_entities
+#   remote_dir: magmar_data/1__openai_extracted_entities
+#   storage_id: atupinirgsa_data
+
+code:
+  # we don't really care, all we want is the vllm server running
+  local_dir: .
+  ignore:
+    - .vagrant/
+    - embodiedbench.egg-info/
+    - embodiedbench/envs/eb_manipulation/amsolver.egg-info/
+    - embodiedbench/envs/eb_manipulation/CoppeliaSim_Pro_V4_1_0_Ubuntu20_04/
+    - embodiedbench/envs/eb_habitat/data/
+    - archive/
+    - running/
+    - logs/
+    - data/
+    - habitat-lab/
+    - outputs/
+    - yolo11n.pt
+    - embodiedbench/envs/eb_manipulation/PyRep/
+    - docs/
+
+
+
+search:
+  job_template:
+    name: EmbodiedBench-eval-{model_config}
+    # sku: 1x 80G2-A100
+    sku: 1x 40G2-A100
+    priority: high
+    mpi: False
+    sla_tier: Premium
+    process_count_per_node: 1
+    identity: managed
+    command:
+      # ####################################################
+      # NONE of this ever gets executed!!!
+      # 
+      # This template is meant to be run with the `-i` flag to enable ssh access later.
+      # ####################################################
+      - set -ex
+
+      - nvidia-smi
+      #- export HF_TOKEN="$HF_TOKEN"
+      
+      - echo "hello {model_config}"
+
+      - MODEL_CHECKPOINT="$MODEL_CHECKPOINT"
+      - PREFIX_NAME="$PREFIX_NAME"
+      
+      - echo "Model Checkpoint $$MODEL_CHECKPOINT"
+      - echo "Prefix Name $$PREFIX_NAME"
+
+      # run VLLM with model
+      - CUR_DIR=$$PWD
+      - echo "Current directory $$CUR_DIR"
+
+      - echo "Setting up vLLM server environment in /tmp/vllm-server..."
+      - cd /tmp/
+
+      - curl -LsSf https://astral.sh/uv/install.sh | sh
+      - source $$HOME/.local/bin/env
+
+      - mkdir -p /tmp/vllm-server
+      - cd /tmp/vllm-server
+      - uv venv --python=3.12 --clear
+      - source .venv/bin/activate
+
+      - uv pip install "vllm[video]==0.10.2" --torch-backend=auto
+      - uv pip install flashinfer-python==0.3.1 bitsandbytes==0.47.0
+
+      - export CUDA_VISIBLE_DEVICES=0,1
+
+      - echo "Starting GPU keep-alive monitor..."
+      - python3 "$$CUR_DIR/gpu_keepalive.py" > /tmp/gpu_keepalive.log 2>&1 &
+      - GPU_MONITOR_PID=$$!
+      - echo "GPU monitor started with PID $$GPU_MONITOR_PID"
+
+      - | 
+        vllm serve "$$MODEL_CHECKPOINT"  \
+           --tensor-parallel-size 2  \
+           --uvicorn-log-level critical  \
+           --allowed-local-media-path /  \
+           --mm-encoder-tp-mode data \
+           --port 43289  \
+           --served-model-name "vllm-model"  \
+           > vllm_server.log 2>&1 &
+
+      - VLLM_PID=$$!
+      - echo "VLLM server PID -> $$VLLM_PID"
+
+      # while the server starts up, install embench
+      - echo "Installing EmbodiedBench in vLLM server environment..."
+      - deactivate
+
+      - cd "$$CUR_DIR"
+
+      - eval "$$(conda shell.bash hook)"
+      - bash install.sh
+
+      # wait for vllm to start up AND that it hasn't crashed (or crash everything)
+      - |
+        while true; do
+          if ! ps -p $$VLLM_PID > /dev/null; then
+            echo "VLLM server has crashed. Exiting."
+            exit 1
+          fi
+          if curl -s http://localhost:43289/v1/models | grep -q "max_model_len"; then
+            echo "VLLM server is ready."
+            break
+          else
+            echo "Waiting for vllm server..."
+            sleep 5
+          fi
+        done
+ 
+      # setup symbolic links to blob
+      - mkdir -p /mnt/magmar_public/atupini-embodiedbench-evals/logs/
+      - mkdir -p /mnt/magmar_public/atupini-embodiedbench-evals/running/
+      - mkdir -p /mnt/magmar_public/atupini-embodiedbench-evals/outputs/
+
+      - ln -s /mnt/magmar_public/atupini-embodiedbench-evals/logs/ logs
+      - ln -s /mnt/magmar_public/atupini-embodiedbench-evals/running/ running
+      - ln -s /mnt/magmar_public/atupini-embodiedbench-evals/outputs/ outputs
+
+      - nu scripts/run_configs/run_single_in_docker.nu 
+          "$$PREFIX_NAME" 
+          --vllm-ports 43289 
+          --vllm-host localhost
+
+      # - echo "Copying logs to persistent storage..."
+
+      # - cp -r logs/ /mnt/magmar_public/atupini-embodiedbench-evals/
+      # - echo "Logs copied."
+
+      # - cp -r running/ /mnt/magmar_public/atupini-embodiedbench-evals/
+      # - echo "Running directory copied."
+
+      # - cp -r outputs/ /mnt/magmar_public/atupini-embodiedbench-evals/
+      # - echo "Outputs copied."
+
+
+    submit_args:
+      container_args:
+        shm_size: 256g
+        ipc: host
+      env:
+        NCCL_IB_DISABLE: 0
+        NCCL_DEBUG: INFO
+        NCCL_IB_TIMEOUT: 60
+        MKL_THREADING_LAYER: GNU
+        # # Additional NCCL settings for multi-node training
+        # NCCL_SOCKET_IFNAME: eth0
+        # NCCL_TREE_THRESHOLD: 0
+        # NCCL_NET_GDR_rLEVEL: 2
+        _AZUREML_SINGULARITY_JOB_UAI: /subscriptions/2cd190bb-b42a-477c-b1bb-2f20932d8dc5/resourceGroups/atupinirg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/atupinirgid
+    tags: []
+  max_trials: 1000
+  type: grid
+  params:
+    - name: model_config
+      spec: discrete
+      values:
+        - "pop"
+        # - "aokvqa+videor1::Qwen2.5-VL-7B-Instruct_BASE::Qwen2.5-VL-7B-Instruct_BASE__sft__llamafactory_ai2thor_aokvqa+videor1_tag_bs1_accum2_lr1e-5_cosine_0.1_ft_llm_qwen_base_pix_3136_12845056_model_singlenode"
+        # - "magmathor0.1p+aokvqa+videor1::Qwen2.5-VL-7B-Instruct_BASE::Qwen2.5-VL-7B-Instruct_BASE__sft__llamafactory_ai2thor_magmathor0.1p+aokvqa+videor1_tag_bs1_accum2_lr1e-5_cosine_0.1_ft_llm_qwen_base_pix_3136_12845056_model_singlenode"
+        # - "Qwen2.5-VL-7B-Instruct::Qwen/Qwen2.5-VL-7B-Instruct"
