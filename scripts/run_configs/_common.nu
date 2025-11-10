@@ -48,7 +48,10 @@ export def start_ssh_tunnels  [
         let cmd = $"amlt ssh \"($job_name)\" -o \"StrictHostKeyChecking=no\" -o \"-4 -L ($local_port):localhost:43289\""
         print $"Starting SSH tunnel for job '($job_name)' on local port ($local_port)..."
 
-        gnome-terminal --tab --title $"SSH Tunnel - ($job_name):($local_port)" -- bash -c $"($cmd); exec bash" | ignore
+        # Echo the command first so users can easily copy-paste if needed
+        let wrapper = $"echo 'Command: ($cmd)'; echo ''; ($cmd); exec bash"
+        
+        gnome-terminal --tab --title $"SSH Tunnel - ($job_name):($local_port)" -- bash -c $wrapper | ignore
         
         sleep 5sec
     }
@@ -74,9 +77,6 @@ export def start_ssh_tunnels  [
             print $"REMOTE_URL ($url) is reachable."
         }
     }
-
-    # back to main tab as active
-    # gnome-terminal --active 0
 }
 
 export def run_batch [
