@@ -11,7 +11,24 @@ ROTATION_RESOLUTION = 3
 VOXEL_SIZE = 100
 CAMERAS = ['front', 'left_shoulder', 'right_shoulder', 'wrist']
 USE_GENERAL_OBJECT_NAMES = True
-object_detection_model = YOLO("yolo11n.pt")
+
+# Lazy-load YOLO model to avoid unnecessary GPU memory allocation
+_object_detection_model = None
+
+def get_object_detection_model():
+    """
+    Lazy-load and return the YOLO object detection model.
+    Uses CPU to avoid competing with main VLM for GPU memory.
+    """
+    global _object_detection_model
+    if _object_detection_model is None:
+        # Use CPU for YOLO to free GPU memory for the main VLM
+        # YOLO11n is very small (~6MB) and runs fast on CPU
+        _object_detection_model = YOLO("yolo11n.pt")
+        # Force model to use CPU to avoid CUDA OOM errors
+        _object_detection_model.to('cpu')
+        print("[eb_man_utils] YOLO model loaded on CPU to conserve GPU memory")
+    return _object_detection_model
 
 # From https://github.com/stepjam/RLBench/blob/master/rlbench/backend/utils.py
 def point_to_voxel_index(
@@ -209,7 +226,8 @@ def draw_bounding_boxes(image_path_list, world_points, camera_extrinsics_list, c
         tvec = T_inv[:3, 3]
         pixel_points_2D, _ = cv2.projectPoints(np.array(world_points), rvec, tvec, camera_intrinsics, np.zeros(4))
 
-        # get the bounding boxes using YOLO
+        # get the bounding boxes using YOLO (lazy-loaded on CPU)
+        object_detection_model = get_object_detection_model()
         results = object_detection_model.predict(source=input_image_path, conf=0.0001, line_width=1, verbose=False)
         predicted_boxes = results[0].boxes.xyxy
         image_bgr = cv2.imread(input_image_path, cv2.IMREAD_COLOR)
