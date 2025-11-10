@@ -123,8 +123,6 @@ max_completion_tokens = int(os.environ.get("REMOTE_MODEL_MAX_TOKENS", 2048))
 remote_url = os.environ.get("remote_url", "").split(",")
 if not isinstance(remote_url, list):
     remote_url = [remote_url]
-if len(remote_url) == 1:
-    remote_url = remote_url[0]
 
 reasoning_mode = os.getenv("EMB_REASONING_MODE", "0") == "1"
 _stop_env = os.getenv("REMOTE_MODEL_STOP_SEQS", "</answer>")
