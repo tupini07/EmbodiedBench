@@ -3,6 +3,9 @@
 # Parse command line arguments
 PORT=${1:-43289}
 
+
+MODEL_CHECKPOINT="/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-9-reward-videor1-images-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_65/actor/huggingface/"
+
 # Qwen2.5-VL-7B-Instruct
 # Qwen2.5-7b_NewJsonParsing_ActionCorrection_OneStepPlan_3Retries_WithReasoning_
 # MODEL_CHECKPOINT="Qwen/Qwen2.5-VL-7B-Instruct"

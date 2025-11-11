@@ -426,9 +426,7 @@ def main():
                             # Show log path and button
                             log_path = get_log_path(exp_name, task, subtask)
                             if log_path and log_path.exists():
-                                # Show relative path
-                                relative_path = log_path.relative_to(Path.cwd())
-                                st.caption(f"📄 `{relative_path}`")
+                                st.caption(f"📄 `{log_path}`")
                                 
                                 # View log button - opens in dialog
                                 if st.button(f"👁️ View Log", key=f"log_{exp_name}_{task}_{subtask}"):

@@ -20,6 +20,7 @@ import statistics
 
 import pandas as pd
 import yaml
+from datetime import datetime
 
 
 def load_experiment_short_names(config_path: Optional[Path] = None) -> Dict[str, str]:
@@ -612,60 +613,311 @@ def print_combined_summary_table(all_results: Dict[str, Dict[str, Dict[str, Path
     print()
 
 
+def parse_aggregated_table_from_text(text: str, env_name: str) -> Dict[str, Dict[str, Optional[float]]]:
+    """Parse an aggregated summary table from text output.
+    
+    Returns a dict mapping experiment_name -> {dimension: task_success_mean, ...}
+    Extracts the mean from "XX.XX% ± YY.YY%" format.
+    For dimensions with "X items missing", stores None but still includes the dimension key.
+    """
+    results: Dict[str, Dict[str, Optional[float]]] = {}
+    
+    # Find the section for this environment
+    env_marker = f"## Environment: {env_name.upper()} - AGGREGATED SUMMARY"
+    if env_marker not in text:
+        return results
+    
+    # Extract the table section
+    start_idx = text.find(env_marker)
+    next_section = text.find("\n## ", start_idx + 1)
+    if next_section == -1:
+        section = text[start_idx:]
+    else:
+        section = text[start_idx:next_section]
+    
+    # Find the table (starts after the header line with |:---|)
+    lines = section.split('\n')
+    in_table = False
+    headers: List[str] = []
+    
+    for line in lines:
+        if not line.strip() or not line.startswith('|'):
+            continue
+            
+        if '|:--' in line or '|---' in line:
+            in_table = True
+            continue
+        
+        if not in_table:
+            # This is the header row
+            headers = [col.strip() for col in line.split('|')[1:-1]]
+            continue
+        
+        # Parse data row
+        cols = [col.strip() for col in line.split('|')[1:-1]]
+        if len(cols) < 2:
+            continue
+        
+        exp_name = cols[0]
+        exp_data: Dict[str, Optional[float]] = {}
+        
+        # Parse each dimension column (skip "Experiment" and "Avg Invalid Action Ratio")
+        for i, header in enumerate(headers[1:], start=1):
+            if header == "Avg Invalid Action Ratio":
+                break
+            
+            if i >= len(cols):
+                continue
+                
+            value_str = cols[i]
+            
+            # Try to extract mean from "XX.XX% ± YY.YY%" format
+            if '%' in value_str:
+                mean_match = re.search(r'([\d.]+)%', value_str)
+                if mean_match:
+                    exp_data[header] = float(mean_match.group(1)) / 100.0
+                else:
+                    exp_data[header] = None
+            elif value_str in ('-', 'N/A', 'no data'):
+                exp_data[header] = None
+            elif 'missing' in value_str.lower():
+                # Mark incomplete data as None, but we should track it exists
+                # Use a special marker to indicate "was present but incomplete"
+                exp_data[header] = None
+            else:
+                try:
+                    exp_data[header] = float(value_str)
+                except ValueError:
+                    exp_data[header] = None
+        
+        if exp_data:
+            results[exp_name] = exp_data
+    
+    return results
+
+
 def main():
     """Main function to process and display all results."""
+    import sys
+    from io import StringIO
+    
     # Get the running directory
     script_dir = Path(__file__).parent
     running_dir = script_dir.parent / "running"
+    results_file = script_dir.parent / "results_pp.txt"
 
     if not running_dir.exists():
         print(f"Error: Running directory not found at {running_dir}")
         return
 
-    print(f"Scanning results from: {running_dir}")
+    # Read old results file BEFORE generating new output
+    old_file_exists = results_file.exists()
+    old_file_content: Optional[str] = None
+    old_file_mtime: Optional[datetime] = None
+    if old_file_exists:
+        old_file_mtime = datetime.fromtimestamp(results_file.stat().st_mtime)
+        with open(results_file, 'r') as f:
+            old_file_content = f.read()
+    
+    # Capture all output to a string buffer
+    output_buffer = StringIO()
+    original_stdout = sys.stdout
+    sys.stdout = output_buffer
+    
+    try:
+        print(f"Scanning results from: {running_dir}")
 
-    # Load short_name mappings from experiment_specs.yaml
-    short_name_map = load_experiment_short_names()
-    if short_name_map:
-        print(f"Loaded {len(short_name_map)} short_name mappings from experiment_specs.yaml")
+        # Load short_name mappings from experiment_specs.yaml
+        short_name_map = load_experiment_short_names()
+        if short_name_map:
+            print(f"Loaded {len(short_name_map)} short_name mappings from experiment_specs.yaml")
 
-    # Parse the results structure
-    results = parse_results_structure(running_dir)
+        # Parse the results structure
+        results = parse_results_structure(running_dir)
 
-    if not results:
-        print("No results found!")
-        return
+        if not results:
+            print("No results found!")
+            return
 
-    # Print summary of what was found
-    print(f"\nFound results for {len(results)} environments:")
-    for env_name in sorted(results.keys()):
-        num_experiments = len(results[env_name])
-        print(f"  - {env_name}: {num_experiments} experiment(s)")
+        # Print summary of what was found
+        print(f"\nFound results for {len(results)} environments:")
+        for env_name in sorted(results.keys()):
+            num_experiments = len(results[env_name])
+            print(f"  - {env_name}: {num_experiments} experiment(s)")
 
-    # # Print detailed tables for each environment
-    # print("\n" + "=" * 150)
-    # print("DETAILED TABLES BY DIMENSION")
-    # print("=" * 150)
+        # Compare with previous results if available
+        if old_file_exists and old_file_content is not None and old_file_mtime is not None:
+            print("\n# CHANGES FROM PREVIOUS RUN\n")
+            print(f"Comparing with previous results from: {old_file_mtime.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            
+            # Track overall changes
+            total_new_experiments = 0
+            total_new_dimensions = 0
+            total_improved = 0
+            total_regressed = 0
+            
+            # Process each environment
+            for env_name in sorted(results.keys()):
+                # Parse old results for this environment
+                old_env_results = parse_aggregated_table_from_text(old_file_content, env_name)
+                
+                if not old_env_results:
+                    print(f"## Environment: {env_name.upper()}\n")
+                    print(f"This environment is new! Found {len(results[env_name])} experiments.\n")
+                    total_new_experiments += len(results[env_name])
+                    continue
+                
+                # Build new results structure by aggregating repetitions
+                clean_pattern = re.compile(r'^(?:Qwen2\.5-VL-7B-Instruct_)|_rep\d+$')
+                
+                def clean_experiment(exp: str) -> str:
+                    exp_with_short = apply_short_name(exp, short_name_map)
+                    return clean_pattern.sub('', exp_with_short)
+                
+                # Collect data grouped by cleaned experiment name
+                new_grouped: Dict[str, Dict[str, List[float]]] = defaultdict(lambda: defaultdict(list))
+                
+                for exp_name, dims in results[env_name].items():
+                    cleaned = clean_experiment(exp_name)
+                    for dimension, path in dims.items():
+                        data = load_summary_json(path)
+                        ts = data.get('task_success')
+                        if isinstance(ts, (int, float)) and not (isinstance(ts, float) and math.isnan(ts)):
+                            new_grouped[cleaned][dimension].append(ts)
+                
+                # Compute means for new results
+                new_env_results: Dict[str, Dict[str, float]] = {}
+                for exp_name, dims in new_grouped.items():
+                    new_env_results[exp_name] = {}
+                    for dim, values in dims.items():
+                        if values:
+                            new_env_results[exp_name][dim] = statistics.mean(values)
+                
+                # Compare experiments
+                env_changes: List[str] = []
+                env_new_experiments: List[str] = []
+                env_new_dimensions: List[Tuple[str, str]] = []
+                env_improvements: List[Tuple[str, str, float, float]] = []
+                env_regressions: List[Tuple[str, str, float, float]] = []
+                
+                # Check for new experiments
+                for exp_name in new_env_results:
+                    if exp_name not in old_env_results:
+                        env_new_experiments.append(exp_name)
+                        total_new_experiments += 1
+                
+                # Check for changes in existing experiments
+                for exp_name in sorted(set(old_env_results.keys()) & set(new_env_results.keys())):
+                    old_dims = old_env_results[exp_name]
+                    new_dims = new_env_results[exp_name]
+                    
+                    # Check for new dimensions
+                    for dim in new_dims:
+                        # Only report as "new" if the dimension didn't exist in old results at all
+                        # Don't report if it existed but was None (incomplete)
+                        if dim not in old_dims:
+                            env_new_dimensions.append((exp_name, dim))
+                            total_new_dimensions += 1
+                        elif new_dims[dim] is not None and old_dims[dim] is not None:
+                            # Compare values (both guaranteed non-None here)
+                            old_val = old_dims[dim]
+                            new_val = new_dims[dim]
+                            assert old_val is not None and new_val is not None  # Type narrowing
+                            diff = new_val - old_val
+                            
+                            # Consider significant changes (> 1% absolute difference)
+                            if abs(diff) > 0.01:
+                                if diff > 0:
+                                    env_improvements.append((exp_name, dim, old_val, new_val))
+                                    total_improved += 1
+                                else:
+                                    env_regressions.append((exp_name, dim, old_val, new_val))
+                                    total_regressed += 1
+                
+                # Print environment changes if any
+                if env_new_experiments or env_new_dimensions or env_improvements or env_regressions:
+                    print(f"## Environment: {env_name.upper()}\n")
+                    
+                    if env_new_experiments:
+                        print(f"### New Experiments ({len(env_new_experiments)})\n")
+                        for exp in sorted(env_new_experiments):
+                            dims = sorted(new_env_results[exp].keys())
+                            print(f"- **{exp}** with dimensions: {', '.join(dims)}")
+                        print()
+                    
+                    if env_new_dimensions:
+                        print(f"### New Dimensions for Existing Experiments ({len(env_new_dimensions)})\n")
+                        dim_by_exp: Dict[str, List[str]] = defaultdict(list)
+                        for exp, dim in env_new_dimensions:
+                            dim_by_exp[exp].append(dim)
+                        for exp in sorted(dim_by_exp.keys()):
+                            dims = sorted(dim_by_exp[exp])
+                            print(f"- **{exp}**: {', '.join(dims)}")
+                        print()
+                    
+                    if env_improvements:
+                        print(f"### Improvements (>{1}% absolute increase) ({len(env_improvements)})\n")
+                        for exp, dim, old_val, new_val in sorted(env_improvements, key=lambda x: x[3]-x[2], reverse=True):
+                            diff = new_val - old_val
+                            print(f"- **{exp}** [{dim}]: {old_val*100:.2f}% → {new_val*100:.2f}% (+{diff*100:.2f}%)")
+                        print()
+                    
+                    if env_regressions:
+                        print(f"### Regressions (>{1}% absolute decrease) ({len(env_regressions)})\n")
+                        for exp, dim, old_val, new_val in sorted(env_regressions, key=lambda x: x[2]-x[3], reverse=True):
+                            diff = new_val - old_val
+                            print(f"- **{exp}** [{dim}]: {old_val*100:.2f}% → {new_val*100:.2f}% ({diff*100:.2f}%)")
+                        print()
+            
+            # Print summary
+            print("## Summary of Changes\n")
+            print(f"- **New experiments**: {total_new_experiments}")
+            print(f"- **New dimensions**: {total_new_dimensions}")
+            print(f"- **Improvements**: {total_improved}")
+            print(f"- **Regressions**: {total_regressed}")
+            print()
+        else:
+            print("\n# CHANGES FROM PREVIOUS RUN\n")
+            print("No previous results file found. This is the first run.\n")
 
-    # for env_name in sorted(results.keys()):
-    #     print_environment_table(env_name, results[env_name])
+        # # Print detailed tables for each environment
+        # print("\n" + "=" * 150)
+        # print("DETAILED TABLES BY DIMENSION")
+        # print("=" * 150)
 
-    # # Print compact tables
-    # print("\n" + "=" * 150)
-    # print("COMPACT TABLES - KEY METRICS")
-    # print("=" * 150)
+        # for env_name in sorted(results.keys()):
+        #     print_environment_table(env_name, results[env_name])
 
-    # for env_name in sorted(results.keys()):
-    #     print_compact_table(env_name, results[env_name])
+        # # Print compact tables
+        # print("\n" + "=" * 150)
+        # print("COMPACT TABLES - KEY METRICS")
+        # print("=" * 150)
 
-    # Print aggregated mean ± std tables
-    print("\n# AGGREGATED SUMMARY TABLES - MEAN ± STD OF TASK SUCCESS\n")
-    for env_name in sorted(results.keys()):
-        print_aggregated_summary_tables(env_name, results[env_name], short_name_map)
+        # for env_name in sorted(results.keys()):
+        #     print_compact_table(env_name, results[env_name])
 
-    # Print combined summary table (all environments in one table)
-    print("\n# COMBINED SUMMARY TABLE - ALL ENVIRONMENTS\n")
-    print_combined_summary_table(results, short_name_map)
+        # Print aggregated mean ± std tables
+        print("\n# AGGREGATED SUMMARY TABLES - MEAN ± STD OF TASK SUCCESS\n")
+        for env_name in sorted(results.keys()):
+            print_aggregated_summary_tables(env_name, results[env_name], short_name_map)
+
+        # Print combined summary table (all environments in one table)
+        print("\n# COMBINED SUMMARY TABLE - ALL ENVIRONMENTS\n")
+        print_combined_summary_table(results, short_name_map)
+        
+    finally:
+        # Restore stdout
+        sys.stdout = original_stdout
+    
+    # Get the generated output
+    output_text = output_buffer.getvalue()
+    
+    # Write to file
+    with open(results_file, 'w') as f:
+        f.write(output_text)
+    
+    # Also print to stdout so user can see it
+    print(output_text)
     
     # # Print individual summary tables (task_success with average invalid action ratio)
     # print("\n# INDIVIDUAL SUMMARY TABLES - TASK SUCCESS WITH AVG INVALID ACTION RATIO\n")
