@@ -234,6 +234,7 @@ experiments:
 
   - prefix: "baseline-videor1-rl-qwen2.5-vl-7b-instruct--EnsuredReasoning"
     model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/pretrained_weights/Video-R1-7B/"
+    draft: true # alf and hab done
     max_tokens: [4096, 6144, 8192]
     temperature: [0.6]
     amlt_job_names:
@@ -259,18 +260,38 @@ experiments:
       # RUN_MANIPULATION: "1"
       # RUN_NAVIGATION: "1"  
 
+  - prefix: "Qwen2.5-7b_Rerun_NoReasoning_"
+    model_checkpoint: "Qwen/Qwen2.5-VL-7B-Instruct"
+    max_tokens: [2048]
+    temperature: [0.0]
+    amlt_job_names:
+      - evolved-skunk
+    extra_env:
+      EMB_REASONING_MODE: "0"
+
+  - prefix: "Qwen2.5-7b_Rerun_WithReasoning_"
+    model_checkpoint: "Qwen/Qwen2.5-VL-7B-Instruct"
+    draft: true # ONLY alf and hab are done
+    max_tokens: [2048]
+    temperature: [0.0]
+    amlt_job_names:
+      - evolved-skunk
+    extra_env:
+      EMB_REASONING_MODE: "1"
+
 
   - prefix: "20251108-combined-5-gated-rm2-step65--actor--huggingface"
     model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-5-reward-videor1-images-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_65/actor/huggingface/"
-    # draft: true # alf and hab done
+    draft: true # alf and hab done
     short_name: combined-5-gated-rm2-step65
     max_tokens: [8192]
     temperature: [0.6]
     amlt_job_names:
       - "saved-arachnid"
       - "bursting-chamois"
-    extra_env:
-      RUN_NAVIGATION: "1"  
+    # extra_env:
+    # <<<<<< TODO: was trying to run nav here but it somehow blocked all alfred jobs >>>>>>
+    #   RUN_NAVIGATION: "1"  
     #   RUN_MANIPULATION: "1"
 
 
@@ -362,6 +383,35 @@ experiments:
     amlt_job_names:
       - "correct-hamster"
       - "holy-lacewing"
+
+
+  - prefix: "20251111-fixed-combined-9-gated-zeromaj-step35"
+    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-9-reward-zeromaj-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_35/actor/huggingface/"
+    short_name: fixed-combined-9-gated-zeromaj-step35
+    max_tokens: [6144] # maybe try 8192 later if we have time?
+    temperature: [0.6]
+    amlt_job_names:
+      - "happy-hawk"
+      - "included-puma"
+
+  - prefix: "20251111-fixed-combined-9-gated-zeromaj-step25"
+    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-9-reward-zeromaj-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_25/actor/huggingface/"
+    short_name: fixed-combined-9-gated-zeromaj-step25
+    max_tokens: [6144] # maybe try 8192 later if we have time?
+    temperature: [0.6]
+    amlt_job_names:
+      - "striking-tick"
+      - "intense-bat"
+
+
+  - prefix: "20251111-fixed-combined-9-gated-zeromaj-step60"
+    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-9-reward-zeromaj-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_60/actor/huggingface/"
+    short_name: fixed-combined-9-gated-zeromaj-step60
+    max_tokens: [6144, 8192] 
+    temperature: [0.6]
+    amlt_job_names:
+      - "singular-bullfrog"
+      - "artistic-shepherd"
 
   # ---------------------------------------------------------------------------------------------------------------------------------------
   # below are drafts waiting for compute
