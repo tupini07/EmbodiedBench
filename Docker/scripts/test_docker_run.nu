@@ -83,7 +83,7 @@ def main [
     let workspace_path = (pwd)
     
     # Build the docker run command with port mappings
-    let docker_cmd = $"docker run -it --rm --gpus ($gpus) --shm-size 256g --ipc host --network host -v ($workspace_path):/workspace -w /workspace -e DEBIAN_FRONTEND=noninteractive ($full_image_name) /bin/bash -l"
+    let docker_cmd = $"docker run -it --rm --gpus ($gpus) --shm-size 256g --ipc host --network host -w /workspace -e DEBIAN_FRONTEND=noninteractive ($full_image_name) /bin/bash -l"
     
     print $"[DEBUG] Running: ($docker_cmd)"
     print ""

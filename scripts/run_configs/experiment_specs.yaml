@@ -63,13 +63,16 @@ base_settings:
     ONLY_ONE_STEP_PLAN: "1"                       # model is asked to produce only one-step plans
     WRAP_IN_CONTEXT_EXAMPLES_WITH_BOX_TAGS: "1"   # wrap in <begin_box> ... <end_box> tags
     USE_VIDEO_R1_REASONING_PROMPT: "0"            # use the video r1 reasoning prompt template
+    SUPPRESS_ENV_FEEDBACK_ON_ACTION_FAILURE: "0"         # suppress environment feedback when action execution fails
+
+    RUN_TEXT_ONLY: "0"                            # whether to run text-only evaluations
     
     EB_SUPRESS_DURATION_LOGS: "0"                 # suppress duration logs in embodiedbench
 
-    RUN_ALFRED: "0"                               # whether to run EB-ALFRED evaluations
-    RUN_HABITAT: "0"                              # whether to run EB-Habitat
+    RUN_ALFRED: "1"                               # whether to run EB-ALFRED evaluations
+    RUN_HABITAT: "1"                              # whether to run EB-Habitat
     RUN_MANIPULATION: "0"                         # whether to run EB-Manipulation
-    RUN_NAVIGATION: "1"                           # whether to run EB-Nav
+    RUN_NAVIGATION: "0"                           # whether to run EB-Nav
 
 #############################################################
 # Experiments
@@ -92,14 +95,14 @@ experiments:
   #   extra_env:
   #     REMOTE_URL: "http://localhost:33001/v1,http://localhost:33002/v1,http://localhost:33003/v1"
 
-  - prefix: "20251106-combined-5-sft_pix_3136_262144_bs1_accum8_gpus8_lr1e-5_cosine0.1_epoch3_freeze_vision-true-proj-true-lm-false_model"
-    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/sft-model-weights/combined/sing/combined-5-sft_pix_3136_262144_bs1_accum8_gpus8_lr1e-5_cosine0.1_epoch3_freeze_vision-true-proj-true-lm-false_model/"
-    draft: true # alf and hab and nav done
-    max_tokens: [6144]
-    temperature: [0.6]
-    amlt_job_names:
-      - "assuring-pup"
-      - "funny-jaybird"
+  # - prefix: "20251106-combined-5-sft_pix_3136_262144_bs1_accum8_gpus8_lr1e-5_cosine0.1_epoch3_freeze_vision-true-proj-true-lm-false_model"
+  #   model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/sft-model-weights/combined/sing/combined-5-sft_pix_3136_262144_bs1_accum8_gpus8_lr1e-5_cosine0.1_epoch3_freeze_vision-true-proj-true-lm-false_model/"
+  #   draft: true # alf and hab and nav done
+  #   max_tokens: [6144]
+  #   temperature: [0.6]
+  #   amlt_job_names:
+  #     - "assuring-pup"
+  #     - "funny-jaybird"
 
   # - prefix: "combined-1-sft_pix_3136_262144_bs1_accum8_gpus8_lr1e-5_ActionCorrection_OneStepPlanLoose_3Retries_WithReasoning_"
   #   model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/sft-model-weights/combined/sing/combined-1-sft_pix_3136_262144_bs1_accum8_gpus8_lr1e-5_cosine0.1_epoch3_freeze_vision-true-proj-true-lm-false_model/"
@@ -115,41 +118,41 @@ experiments:
   #   extra_env:
   #     REMOTE_URL: "http://localhost:43001/v1,http://localhost:43002/v1,http://localhost:43003/v1"
 
-  - prefix: "20251106-combined-2-sft_pix_3136_262144_bs1_accum8_gpus8_lr1e-5_cosine0.1_epoch3_freeze_vision-true-proj-true-lm-false_model_ActionCorrection_OneStepPlanLoose_3Retries_WithReasoning_"
-    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/sft-model-weights/combined/sing/combined-2-sft_pix_3136_262144_bs1_accum8_gpus8_lr1e-5_cosine0.1_epoch3_freeze_vision-true-proj-true-lm-false_model/"
-    draft: true # ONLY alf and hab and nav are done
-    max_tokens: [6144]
-    temperature: [0.6, 0.7]
-    amlt_job_names:
-      - "sharp-sculpin"
-      - "driving-seal"
-      - "fond-parakeet"
-    # extra_env:
-    #   DEBUG_REMOTE_MODEL_INPUTS: "1" 
-    #   RUN_MANIPULATION: "1"
-    #   RUN_NAVIGATION: "1"  
+  # - prefix: "20251106-combined-2-sft_pix_3136_262144_bs1_accum8_gpus8_lr1e-5_cosine0.1_epoch3_freeze_vision-true-proj-true-lm-false_model_ActionCorrection_OneStepPlanLoose_3Retries_WithReasoning_"
+  #   model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/sft-model-weights/combined/sing/combined-2-sft_pix_3136_262144_bs1_accum8_gpus8_lr1e-5_cosine0.1_epoch3_freeze_vision-true-proj-true-lm-false_model/"
+  #   draft: true # ONLY alf and hab and nav are done
+  #   max_tokens: [6144]
+  #   temperature: [0.6, 0.7]
+  #   amlt_job_names:
+  #     - "sharp-sculpin"
+  #     - "driving-seal"
+  #     - "fond-parakeet"
+  #   # extra_env:
+  #   #   DEBUG_REMOTE_MODEL_INPUTS: "1" 
+  #   #   RUN_MANIPULATION: "1"
+  #   #   RUN_NAVIGATION: "1"  
 
 
-  - prefix: "20251106-gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2"
-    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/videor1-images-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_20/actor/huggingface/"
-    draft: true # ONLY alf and hab and nav are done
-    max_tokens: [6144]
-    temperature: [0.6]
-    amlt_job_names:
-      - "inspired-panda"
-      - "beloved-stingray"
-      - "composed-sculpin"
+  # - prefix: "20251106-gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2"
+  #   model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/videor1-images-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_20/actor/huggingface/"
+  #   draft: true # ONLY alf and hab and nav are done
+  #   max_tokens: [6144]
+  #   temperature: [0.6]
+  #   amlt_job_names:
+  #     - "inspired-panda"
+  #     - "beloved-stingray"
+  #     - "composed-sculpin"
 
 
-  - prefix: "20251106-gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2--global_step_35--actor--huggingface"
-    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/videor1-images-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_35/actor/huggingface/"
-    draft: true # alf and hab and nav done
-    max_tokens: [6144, 8192]
-    temperature: [0.6]
-    amlt_job_names:
-      - "peaceful-crayfish"
-      - "aware-wombat"
-      - "artistic-krill"
+  # - prefix: "20251106-gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2--global_step_35--actor--huggingface"
+  #   model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/videor1-images-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_35/actor/huggingface/"
+  #   draft: true # alf and hab and nav done
+  #   max_tokens: [6144, 8192]
+  #   temperature: [0.6]
+  #   amlt_job_names:
+  #     - "peaceful-crayfish"
+  #     - "aware-wombat"
+  #     - "artistic-krill"
 
 
   # - prefix: "20251106-gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2--global_step_30--actor--huggingface"
@@ -174,285 +177,539 @@ experiments:
   # #     - "rational-cub"
 
 
-  - prefix: "20251107-gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2--global_step_45--ActCorr_1SPLoose_3Ret_WReason_"
-    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-2-reward-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_45/actor/huggingface/"
-    draft: true # ONLY alf and hab and nav are done
-    max_tokens: [8192]
+  # - prefix: "20251107-gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2--global_step_45--ActCorr_1SPLoose_3Ret_WReason_"
+  #   model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-2-reward-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_45/actor/huggingface/"
+  #   draft: true # ONLY alf and hab and nav are done
+  #   max_tokens: [8192]
+  #   temperature: [0.6]
+  #   amlt_job_names:
+  #     - sweeping-gecko
+  #     - crucial-doberman
+
+
+  # - prefix: "20251107-gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2--global_step_40--ActCorr_1SPLoose_3Ret_WReason_"
+  #   model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-2-reward-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_40/actor/huggingface/"
+  #   draft: true # alf and hab and nav done
+  #   max_tokens: [8192]
+  #   temperature: [0.6]
+  #   amlt_job_names:
+  #     - thorough-rabbit
+
+  # - prefix: "baseline-videor1-sft-qwen2.5-vl-7b-instruct"
+  #   model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/public_pretrained_weights/videor1-Qwen2.5-VL-7B-Instruct/"
+  #   draft: true # alf and hab and nav done
+  #   max_tokens: [4096]
+  #   temperature: [0.6]
+  #   amlt_job_names:
+  #     - cosmic-flamingo
+  #     - live-jackal
+  #   # extra_env:
+  #   #   RUN_MANIPULATION: "1"
+  #   #   RUN_NAVIGATION: "1"  
+
+  # - prefix: "baseline-videor1-rl-qwen2.5-vl-7b-instruct"
+  #   model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/pretrained_weights/Video-R1-7B/"
+  #   draft: true # ONLY alf and hab and nav are done
+  #   max_tokens: [4096]
+  #   temperature: [0.6]
+  #   amlt_job_names:
+  #     - precious-lacewing
+  #     - splendid-monarch
+  #   # extra_env:
+  #   #   RUN_MANIPULATION: "1"
+  #   #   RUN_NAVIGATION: "1"  
+
+
+  # - prefix: "baseline-videor1-sft-qwen2.5-vl-7b-instruct--EnsuredReasoning"
+  #   model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/public_pretrained_weights/videor1-Qwen2.5-VL-7B-Instruct/"
+  #   draft: true # ONLY alf and hab and nav are done
+  #   max_tokens: [4096]
+  #   temperature: [0.6]
+  #   amlt_job_names:
+  #     - cosmic-flamingo
+  #     - live-jackal
+  #   extra_env:
+  #     EMB_REASONING_MODE: "1"
+  #     USE_VIDEO_R1_REASONING_PROMPT: "1"
+  #     WRAP_IN_CONTEXT_EXAMPLES_WITH_BOX_TAGS: "0"
+  #     # RUN_MANIPULATION: "1"
+  #     # RUN_NAVIGATION: "1"  
+
+  # - prefix: "baseline-videor1-rl-qwen2.5-vl-7b-instruct--EnsuredReasoning"
+  #   model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/pretrained_weights/Video-R1-7B/"
+  #   draft: true # ONLY alf and hab and nav are done
+  #   max_tokens: [4096, 6144, 8192]
+  #   temperature: [0.6]
+  #   amlt_job_names:
+  #     - precious-lacewing
+  #     - splendid-monarch
+  #   extra_env:
+  #     EMB_REASONING_MODE: "1"
+  #     USE_VIDEO_R1_REASONING_PROMPT: "1"
+  #     WRAP_IN_CONTEXT_EXAMPLES_WITH_BOX_TAGS: "0"
+  #     # RUN_MANIPULATION: "1"
+  #     # RUN_NAVIGATION: "1"  
+
+
+  # - prefix: "Qwen2.5-7b_NewJsonParsing_ActionCorrection_OneStepPlan_3Retries_WithReasoning_"
+  #   model_checkpoint: "Qwen/Qwen2.5-VL-7B-Instruct"
+  #   draft: true # ONLY alf and hab and nav are done
+  #   max_tokens: [4096]
+  #   temperature: [0.6]
+  #   amlt_job_names:
+  #     - evolved-skunk
+  #   extra_env:
+  #     EMB_REASONING_MODE: "1"
+  #     # RUN_MANIPULATION: "1"
+  #     # RUN_NAVIGATION: "1"  
+
+  # - prefix: "Qwen2.5-7b_Rerun_NoReasoning_"
+  #   model_checkpoint: "Qwen/Qwen2.5-VL-7B-Instruct"
+  #   # draft: true # ONLY alf and hab are done
+  #   max_tokens: [2048]
+  #   temperature: [0.0]
+  #   amlt_job_names:
+  #     - evolved-skunk
+  #   extra_env:
+  #     EMB_REASONING_MODE: "0"
+
+  # - prefix: "Qwen2.5-7b_Rerun_WithReasoning_"
+  #   model_checkpoint: "Qwen/Qwen2.5-VL-7B-Instruct"
+  #   # draft: true # ONLY alf and hab are done
+  #   max_tokens: [2048]
+  #   temperature: [0.0]
+  #   amlt_job_names:
+  #     - evolved-skunk
+  #   extra_env:
+  #     EMB_REASONING_MODE: "1"
+
+
+  # - prefix: "20251108-combined-5-gated-rm2-step65--actor--huggingface"
+  #   model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-5-reward-videor1-images-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_65/actor/huggingface/"
+  #   # draft: true # alf and hab done
+  #   short_name: combined-5-gated-rm2-step65
+  #   max_tokens: [8192]
+  #   temperature: [0.6]
+  #   amlt_job_names:
+  #     - "saved-arachnid"
+  #     - "bursting-chamois"
+  #   # extra_env:
+  #   # <<<<<< TODO: was trying to run nav here but it somehow blocked all alfred jobs >>>>>>
+  #   #   RUN_NAVIGATION: "1"  
+  #   #   RUN_MANIPULATION: "1"
+
+
+  # - prefix: "20251108-combined-5-gated-rm2-step55--actor--huggingface"
+  #   model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-5-reward-videor1-images-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_55/actor/huggingface/"
+  #   short_name: gated-combined-5-rl-step-55
+  #   draft: true # alf and hab and nav done
+  #   max_tokens: [8192]
+  #   temperature: [0.6]
+  #   amlt_job_names:
+  #     - "pleasing-crappie"
+  #     - "accepted-grubworm"
+  #   # extra_env:
+  #   #   RUN_MANIPULATION: "1"
+  #   #   RUN_NAVIGATION: "1"  
+
+
+  # - prefix: "20251108-combined-5-total-gated-rm2-step20--actor--huggingface"
+  #   model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-5-reward-videor1-images-pxmc-verifier-forced-reasoning-glm4.5/total-gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_20/actor/huggingface/"
+  #   short_name: combined-5-total-gated-rm2-step20
+  #   draft: true # alf and hab and nav done
+  #   max_tokens: [8192]
+  #   temperature: [0.6]
+  #   amlt_job_names:
+  #     - "sensible-tiger"
+  #     - "boss-terrapin"
+  #   # extra_env:
+  #   #   RUN_MANIPULATION: "1"
+  #   #   RUN_NAVIGATION: "1"  
+
+
+  # - prefix: "20251109-combined-9-sft-baseline"
+  #   model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/sft-model-weights/combined/sing/single-combined-9-sft_pix_3136_262144_bs2_accum16_gpus8_lr1e-5_cosine0.1_epoch3_freeze_vision-true-proj-true-lm-false_model/"
+  #   short_name: combined-9-sft-baseline
+  #   draft: true # alf and hab and nav done
+  #   max_tokens: [6144]
+  #   temperature: [0.6]
+  #   amlt_job_names:
+  #     - "proud-moccasin"
+  #     - "pet-mustang"
+  #   # extra_env:
+  #   #   RUN_MANIPULATION: "1"
+  #   #   RUN_NAVIGATION: "1"  
+
+  # - prefix: "20251109-combined-8-sft-baseline"
+  #   model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/sft-model-weights/combined/sing/single-combined-8-sft_pix_3136_262144_bs2_accum16_gpus8_lr1e-5_cosine0.1_epoch3_freeze_vision-true-proj-true-lm-false_model/"
+  #   short_name: combined-8-sft-baseline
+  #   draft: true # alf and hab and nav done
+  #   max_tokens: [6144]
+  #   temperature: [0.6]
+  #   amlt_job_names:
+  #     - "awake-camel"
+  #     - "shining-crawfish"
+  #   # extra_env:
+  #   #   RUN_MANIPULATION: "1"
+  #   #   RUN_NAVIGATION: "1"  
+
+  # - prefix: "20251109-combined-7-sft-baseline"
+  #   model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/sft-model-weights/combined/sing/single-combined-7-sft_pix_3136_262144_bs2_accum16_gpus8_lr1e-5_cosine0.1_epoch3_freeze_vision-true-proj-true-lm-false_model/"
+  #   short_name: combined-7-sft-baseline
+  #   draft: true # alf and hab and nav done
+  #   max_tokens: [6144]
+  #   temperature: [0.6]
+  #   amlt_job_names:
+  #     - "teaching-tuna"
+  #     - "relieved-eagle"
+  #   # extra_env:
+  #   #   RUN_MANIPULATION: "1"
+  #   #   RUN_NAVIGATION: "1"  
+
+
+  # - prefix: "20251109-total-gated-combined-5-rl-step-55"
+  #   model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-5-reward-videor1-images-pxmc-verifier-forced-reasoning-glm4.5/total-gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_55/actor/huggingface/"
+  #   short_name: total-gated-combined-5-rl-step-55
+  #   draft: true # alf and hab and nav done
+  #   max_tokens: [8192]
+  #   temperature: [0.6]
+  #   amlt_job_names:
+  #     - "closing-bluegill"
+  #     - "talented-ewe"
+  #   # extra_env:
+  #   #   RUN_MANIPULATION: "1"
+  #   #   RUN_NAVIGATION: "1"  
+
+  # - prefix: "20251111-rl-gated-combined-9-step65"
+  #   model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-9-reward-videor1-images-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_65/actor/huggingface/"
+  #   short_name: rl-gated-combined-9-step65
+  #   # draft: true # alf and hab done
+  #   max_tokens: [6144] # maybe try 8192 later if we have time?
+  #   temperature: [0.6]
+  #   amlt_job_names:
+  #     - "correct-hamster"
+  #     - "holy-lacewing"
+
+
+  # - prefix: "20251111-fixed-combined-9-gated-zeromaj-step35"
+  #   model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-9-reward-zeromaj-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_35/actor/huggingface/"
+  #   short_name: fixed-combined-9-gated-zeromaj-step35
+  #   # draft: true # alf and hab done
+  #   max_tokens: [6144] # maybe try 8192 later if we have time?
+  #   temperature: [0.6]
+  #   amlt_job_names:
+  #     - "happy-hawk"
+  #     - "included-puma"
+
+  # - prefix: "20251111-fixed-combined-9-gated-zeromaj-step25"
+  #   model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-9-reward-zeromaj-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_25/actor/huggingface/"
+  #   short_name: fixed-combined-9-gated-zeromaj-step25
+  #   # draft: true # alf and hab done
+  #   max_tokens: [6144] # maybe try 8192 later if we have time?
+  #   temperature: [0.6]
+  #   amlt_job_names:
+  #     - "striking-tick"
+  #     - "intense-bat"
+
+
+  # - prefix: "20251111-fixed-combined-9-gated-zeromaj-step60"
+  #   model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-9-reward-zeromaj-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_60/actor/huggingface/"
+  #   short_name: fixed-combined-9-gated-zeromaj-step60
+  #   # draft: true # alf and hab done
+  #   max_tokens: [6144, 8192] 
+  #   temperature: [0.6]
+  #   amlt_job_names:
+  #     - "singular-bullfrog"
+  #     - "artistic-shepherd"
+
+  # - prefix: "20251111-fixed-combined-9-gated-zeromaj-step70"
+  #   model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-9-reward-zeromaj-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_70/actor/huggingface/"
+  #   short_name: fixed-combined-9-gated-zeromaj-step70
+  #   # draft: true # alf and hab done
+  #   max_tokens: [6144, 8192]
+  #   temperature: [0.6]
+  #   amlt_job_names:
+  #     - "becoming-newt"
+  #     - "wanted-malamute"
+
+  # - prefix: "20251113-fixed-combined-9-gated-zeromaj-videor1-pxmc-num-3k-step25"
+  #   model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-9-reward-zeromaj-pxmc-verifier-forced-reasoning-glm4.5/gated-videor1images_pxmc_num3K-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_25/actor/huggingface/"
+  #   short_name: fixed-combined-9-gated-zeromaj-videor1-pxmc-num-3k-step25
+  #   # draft: true # alf and hab done
+  #   max_tokens: [6144, 8192]
+  #   temperature: [0.6]
+  #   amlt_job_names:
+  #     - "neutral-dogfish"
+  #     - "sharing-cheetah"
+
+  # - prefix: "20251113-fixed-combined-9-gated-zeromaj-videor1-pxmc-num-3k-step30"
+  #   model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-9-reward-zeromaj-pxmc-verifier-forced-reasoning-glm4.5/gated-videor1images_pxmc_num3K-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_30/actor/huggingface/"
+  #   short_name: fixed-combined-9-gated-zeromaj-videor1-pxmc-num-3k-step30
+  #   # draft: true # alf and hab done
+  #   max_tokens: [6144, 8192]
+  #   temperature: [0.6]
+  #   amlt_job_names:
+  #     - "intimate-flea"
+  #     - "keen-redfish"
+
+
+  - prefix: "20251117-retrial-fixed-combined-9-gated-zeromaj-videor1-pxmc-num-3k-step80"
+    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-9-reward-zeromaj-pxmc-verifier-forced-reasoning-glm4.5/gated-videor1images_pxmc_num3K-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_80/actor/huggingface/"
+    short_name: retrial-fixed-combined-9-gated-zeromaj-videor1-pxmc-num-3k-step80
+    draft: true # alf and hab done
+    max_tokens: [6144, 8192]
     temperature: [0.6]
     amlt_job_names:
-      - sweeping-gecko
-      - crucial-doberman
+      - "charming-kiwi"
+      - "logical-wildcat"
+      - "sound-magpie"
 
 
-  - prefix: "20251107-gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2--global_step_40--ActCorr_1SPLoose_3Ret_WReason_"
-    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-2-reward-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_40/actor/huggingface/"
-    draft: true # alf and hab and nav done
-    max_tokens: [8192]
-    temperature: [0.6]
-    amlt_job_names:
-      - thorough-rabbit
-
-  - prefix: "baseline-videor1-sft-qwen2.5-vl-7b-instruct"
-    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/public_pretrained_weights/videor1-Qwen2.5-VL-7B-Instruct/"
-    draft: true # alf and hab and nav done
-    max_tokens: [4096]
-    temperature: [0.6]
-    amlt_job_names:
-      - cosmic-flamingo
-      - live-jackal
-    # extra_env:
-    #   RUN_MANIPULATION: "1"
-    #   RUN_NAVIGATION: "1"  
-
-  - prefix: "baseline-videor1-rl-qwen2.5-vl-7b-instruct"
-    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/pretrained_weights/Video-R1-7B/"
-    draft: true # ONLY alf and hab and nav are done
-    max_tokens: [4096]
-    temperature: [0.6]
-    amlt_job_names:
-      - precious-lacewing
-      - splendid-monarch
-    # extra_env:
-    #   RUN_MANIPULATION: "1"
-    #   RUN_NAVIGATION: "1"  
-
-
-  - prefix: "baseline-videor1-sft-qwen2.5-vl-7b-instruct--EnsuredReasoning"
-    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/public_pretrained_weights/videor1-Qwen2.5-VL-7B-Instruct/"
-    draft: true # ONLY alf and hab and nav are done
-    max_tokens: [4096]
-    temperature: [0.6]
-    amlt_job_names:
-      - cosmic-flamingo
-      - live-jackal
-    extra_env:
-      EMB_REASONING_MODE: "1"
-      USE_VIDEO_R1_REASONING_PROMPT: "1"
-      WRAP_IN_CONTEXT_EXAMPLES_WITH_BOX_TAGS: "0"
-      # RUN_MANIPULATION: "1"
-      # RUN_NAVIGATION: "1"  
-
-  - prefix: "baseline-videor1-rl-qwen2.5-vl-7b-instruct--EnsuredReasoning"
-    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/pretrained_weights/Video-R1-7B/"
-    draft: true # ONLY alf and hab and nav are done
-    max_tokens: [4096, 6144, 8192]
-    temperature: [0.6]
-    amlt_job_names:
-      - precious-lacewing
-      - splendid-monarch
-    extra_env:
-      EMB_REASONING_MODE: "1"
-      USE_VIDEO_R1_REASONING_PROMPT: "1"
-      WRAP_IN_CONTEXT_EXAMPLES_WITH_BOX_TAGS: "0"
-      # RUN_MANIPULATION: "1"
-      # RUN_NAVIGATION: "1"  
-
-
-  - prefix: "Qwen2.5-7b_NewJsonParsing_ActionCorrection_OneStepPlan_3Retries_WithReasoning_"
-    model_checkpoint: "Qwen/Qwen2.5-VL-7B-Instruct"
-    draft: true # ONLY alf and hab and nav are done
-    max_tokens: [4096]
-    temperature: [0.6]
-    amlt_job_names:
-      - evolved-skunk
-    extra_env:
-      EMB_REASONING_MODE: "1"
-      # RUN_MANIPULATION: "1"
-      # RUN_NAVIGATION: "1"  
-
-  - prefix: "Qwen2.5-7b_Rerun_NoReasoning_"
-    model_checkpoint: "Qwen/Qwen2.5-VL-7B-Instruct"
-    # draft: true # ONLY alf and hab are done
-    max_tokens: [2048]
-    temperature: [0.0]
-    amlt_job_names:
-      - evolved-skunk
-    extra_env:
-      EMB_REASONING_MODE: "0"
-
-  - prefix: "Qwen2.5-7b_Rerun_WithReasoning_"
-    model_checkpoint: "Qwen/Qwen2.5-VL-7B-Instruct"
-    # draft: true # ONLY alf and hab are done
-    max_tokens: [2048]
-    temperature: [0.0]
-    amlt_job_names:
-      - evolved-skunk
-    extra_env:
-      EMB_REASONING_MODE: "1"
-
-
-  - prefix: "20251108-combined-5-gated-rm2-step65--actor--huggingface"
+  - prefix: "20251117-text-only--combined-5-gated-rm2-step65"
     model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-5-reward-videor1-images-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_65/actor/huggingface/"
-    # draft: true # alf and hab done
-    short_name: combined-5-gated-rm2-step65
+    short_name: text-only--combined-5-gated-rm2-step65
+    draft: true
     max_tokens: [8192]
     temperature: [0.6]
     amlt_job_names:
       - "saved-arachnid"
       - "bursting-chamois"
-    # extra_env:
-    # <<<<<< TODO: was trying to run nav here but it somehow blocked all alfred jobs >>>>>>
-    #   RUN_NAVIGATION: "1"  
-    #   RUN_MANIPULATION: "1"
+    extra_env:
+      RUN_TEXT_ONLY: "1"
 
 
-  - prefix: "20251108-combined-5-gated-rm2-step55--actor--huggingface"
-    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-5-reward-videor1-images-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_55/actor/huggingface/"
-    short_name: gated-combined-5-rl-step-55
-    draft: true # alf and hab and nav done
-    max_tokens: [8192]
+  - prefix: "20251117-text-only--baseline-videor1-sft-qwen2.5-vl-7b-instruct--EnsuredReasoning"
+    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/public_pretrained_weights/videor1-Qwen2.5-VL-7B-Instruct/"
+    short_name: text-only--baseline-videor1-sft-qwen2.5-vl-7b-instruct--EnsuredReasoning
+    draft: true
+    max_tokens: [4096]
     temperature: [0.6]
     amlt_job_names:
-      - "pleasing-crappie"
-      - "accepted-grubworm"
-    # extra_env:
-    #   RUN_MANIPULATION: "1"
-    #   RUN_NAVIGATION: "1"  
+      - "cosmic-flamingo"
+      - "live-jackal"
+    extra_env:
+      EMB_REASONING_MODE: "1"
+      USE_VIDEO_R1_REASONING_PROMPT: "1"
+      WRAP_IN_CONTEXT_EXAMPLES_WITH_BOX_TAGS: "0"
+      RUN_TEXT_ONLY: "1"
 
 
-  - prefix: "20251108-combined-5-total-gated-rm2-step20--actor--huggingface"
-    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-5-reward-videor1-images-pxmc-verifier-forced-reasoning-glm4.5/total-gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_20/actor/huggingface/"
-    short_name: combined-5-total-gated-rm2-step20
-    draft: true # alf and hab and nav done
-    max_tokens: [8192]
-    temperature: [0.6]
+  - prefix: "20251117-text-only--Qwen2.5-7b_Rerun_WithReasoning_"
+    model_checkpoint: "Qwen/Qwen2.5-VL-7B-Instruct"
+    short_name: text-only--Qwen2.5-7b_Rerun_WithReasoning_
+    draft: true
+    max_tokens: [2048]
+    temperature: [0.0]
     amlt_job_names:
-      - "sensible-tiger"
-      - "boss-terrapin"
-    # extra_env:
-    #   RUN_MANIPULATION: "1"
-    #   RUN_NAVIGATION: "1"  
+      - "evolved-skunk"
+    extra_env:
+      EMB_REASONING_MODE: "1"
+      RUN_TEXT_ONLY: "1"
+
+  - prefix: "20251118-text-only--GPT4o"
+    short_name: text-only--GPT4o
+    draft: true
+    max_tokens: [4096]
+    temperature: [0.0]
+    extra_env:
+      RUN_TEXT_ONLY: "1"
+      MODEL_NAME: "gpt-4o"
+      RUN_HABITAT: "0"
 
 
-  - prefix: "20251109-combined-9-sft-baseline"
-    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/sft-model-weights/combined/sing/single-combined-9-sft_pix_3136_262144_bs2_accum16_gpus8_lr1e-5_cosine0.1_epoch3_freeze_vision-true-proj-true-lm-false_model/"
-    short_name: combined-9-sft-baseline
-    draft: true # alf and hab and nav done
-    max_tokens: [6144]
-    temperature: [0.6]
-    amlt_job_names:
-      - "proud-moccasin"
-      - "pet-mustang"
-    # extra_env:
-    #   RUN_MANIPULATION: "1"
-    #   RUN_NAVIGATION: "1"  
-
-  - prefix: "20251109-combined-8-sft-baseline"
-    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/sft-model-weights/combined/sing/single-combined-8-sft_pix_3136_262144_bs2_accum16_gpus8_lr1e-5_cosine0.1_epoch3_freeze_vision-true-proj-true-lm-false_model/"
-    short_name: combined-8-sft-baseline
-    draft: true # alf and hab and nav done
-    max_tokens: [6144]
-    temperature: [0.6]
-    amlt_job_names:
-      - "awake-camel"
-      - "shining-crawfish"
-    # extra_env:
-    #   RUN_MANIPULATION: "1"
-    #   RUN_NAVIGATION: "1"  
-
-  - prefix: "20251109-combined-7-sft-baseline"
-    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/sft-model-weights/combined/sing/single-combined-7-sft_pix_3136_262144_bs2_accum16_gpus8_lr1e-5_cosine0.1_epoch3_freeze_vision-true-proj-true-lm-false_model/"
-    short_name: combined-7-sft-baseline
-    draft: true # alf and hab and nav done
-    max_tokens: [6144]
-    temperature: [0.6]
-    amlt_job_names:
-      - "teaching-tuna"
-      - "relieved-eagle"
-    # extra_env:
-    #   RUN_MANIPULATION: "1"
-    #   RUN_NAVIGATION: "1"  
+  - prefix: "20251118-GPT4o"
+    short_name: GPT4o
+    draft: true
+    max_tokens: [4096]
+    temperature: [0.0]
+    extra_env:
+      MODEL_NAME: "gpt-4o"
+      RUN_HABITAT: "0"
 
 
-  - prefix: "20251109-total-gated-combined-5-rl-step-55"
-    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-5-reward-videor1-images-pxmc-verifier-forced-reasoning-glm4.5/total-gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_55/actor/huggingface/"
-    short_name: total-gated-combined-5-rl-step-55
-    draft: true # alf and hab and nav done
-    max_tokens: [8192]
-    temperature: [0.6]
-    amlt_job_names:
-      - "closing-bluegill"
-      - "talented-ewe"
-    # extra_env:
-    #   RUN_MANIPULATION: "1"
-    #   RUN_NAVIGATION: "1"  
-
-  - prefix: "20251111-rl-gated-combined-9-step65"
-    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-9-reward-videor1-images-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_65/actor/huggingface/"
-    short_name: rl-gated-combined-9-step65
-    # draft: true # alf and hab done
-    max_tokens: [6144] # maybe try 8192 later if we have time?
-    temperature: [0.6]
-    amlt_job_names:
-      - "correct-hamster"
-      - "holy-lacewing"
+  - prefix: "20251118-text-only--GPT-o3"
+    short_name: text-only--GPT4o
+    draft: true
+    max_tokens: [4096]
+    temperature: [0.0]
+    extra_env:
+      RUN_TEXT_ONLY: "1"
+      MODEL_NAME: "o3"
 
 
-  - prefix: "20251111-fixed-combined-9-gated-zeromaj-step35"
-    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-9-reward-zeromaj-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_35/actor/huggingface/"
-    short_name: fixed-combined-9-gated-zeromaj-step35
-    # draft: true # alf and hab done
-    max_tokens: [6144] # maybe try 8192 later if we have time?
-    temperature: [0.6]
-    amlt_job_names:
-      - "happy-hawk"
-      - "included-puma"
-
-  - prefix: "20251111-fixed-combined-9-gated-zeromaj-step25"
-    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-9-reward-zeromaj-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_25/actor/huggingface/"
-    short_name: fixed-combined-9-gated-zeromaj-step25
-    # draft: true # alf and hab done
-    max_tokens: [6144] # maybe try 8192 later if we have time?
-    temperature: [0.6]
-    amlt_job_names:
-      - "striking-tick"
-      - "intense-bat"
+  - prefix: "20251118-GPT-o3"
+    short_name: GPT4o
+    draft: true
+    max_tokens: [4096]
+    temperature: [0.0]
+    extra_env:
+      MODEL_NAME: "o3"
 
 
-  - prefix: "20251111-fixed-combined-9-gated-zeromaj-step60"
-    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-9-reward-zeromaj-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_60/actor/huggingface/"
-    short_name: fixed-combined-9-gated-zeromaj-step60
-    # draft: true # alf and hab done
-    max_tokens: [6144, 8192] 
-    temperature: [0.6]
-    amlt_job_names:
-      - "singular-bullfrog"
-      - "artistic-shepherd"
+  - prefix: "20251118-text-only--GPT4o_multi-step"
+    short_name: text-only--GPT4o_multi-step
+    draft: true
+    max_tokens: [4096]
+    temperature: [0.0]
+    extra_env:
+      RUN_TEXT_ONLY: "1"
+      MODEL_NAME: "gpt-4o"
+      ONLY_ONE_STEP_PLAN: "0"
+      RUN_HABITAT: "0"
 
-  - prefix: "20251111-fixed-combined-9-gated-zeromaj-step70"
-    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-9-reward-zeromaj-pxmc-verifier-forced-reasoning-glm4.5/gated-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_70/actor/huggingface/"
-    short_name: fixed-combined-9-gated-zeromaj-step70
-    # draft: true # alf and hab done
+
+  - prefix: "20251118-GPT4o_multi-step"
+    short_name: GPT4o_multi-step
+    draft: true
+    max_tokens: [4096]
+    temperature: [0.0]
+    extra_env:
+      RUN_TEXT_ONLY: "0"
+      MODEL_NAME: "gpt-4o"
+      ONLY_ONE_STEP_PLAN: "0"
+      RUN_HABITAT: "0"
+
+
+  - prefix: "20251119-test-ablate-fixed-combined-9-gated-zeromaj-videor1-pxmc-num-3k-step50"
+    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-9-reward-zeromaj-pxmc-verifier-forced-reasoning-glm4.5/gated-videor1images_pxmc_num3K-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_50/actor/huggingface/"
+    short_name: test-ablate-fixed-combined-9-gated-zeromaj-videor1-pxmc-num-3k-step50
     max_tokens: [6144, 8192]
     temperature: [0.6]
     amlt_job_names:
-      - "becoming-newt"
-      - "wanted-malamute"
+      - "teaching-condor"
+      - "leading-husky"
+      - "happy-foxhound"
 
-  - prefix: "20251113-fixed-combined-9-gated-zeromaj-videor1-pxmc-num-3k-step25"
-    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-9-reward-zeromaj-pxmc-verifier-forced-reasoning-glm4.5/gated-videor1images_pxmc_num3K-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_25/actor/huggingface/"
-    short_name: fixed-combined-9-gated-zeromaj-videor1-pxmc-num-3k-step25
-    # draft: true # alf and hab done
+  - prefix: "20251119-test-ablate-fixed-combined-9-gated-zeromaj-videor1-pxmc-num-3k-step70"
+    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-9-reward-zeromaj-pxmc-verifier-forced-reasoning-glm4.5/gated-videor1images_pxmc_num3K-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_70/actor/huggingface/"
+    short_name: test-ablate-fixed-combined-9-gated-zeromaj-videor1-pxmc-num-3k-step70
     max_tokens: [6144, 8192]
     temperature: [0.6]
     amlt_job_names:
-      - "neutral-dogfish"
-      - "sharing-cheetah"
+      - "moral-colt"
+      - "fancy-lark"
+      - "causal-terrapin"
 
-  - prefix: "20251113-fixed-combined-9-gated-zeromaj-videor1-pxmc-num-3k-step30"
-    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-9-reward-zeromaj-pxmc-verifier-forced-reasoning-glm4.5/gated-videor1images_pxmc_num3K-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_30/actor/huggingface/"
-    short_name: fixed-combined-9-gated-zeromaj-videor1-pxmc-num-3k-step30
-    # draft: true # alf and hab done
+  - prefix: "20251119-no_env_feedback--baseline-videor1-sft-qwen2.5-vl-7b-instruct--EnsuredReasoning"
+    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/public_pretrained_weights/videor1-Qwen2.5-VL-7B-Instruct/"
+    short_name: no_env_feedback--baseline-videor1-sft-qwen2.5-vl-7b-instruct--EnsuredReasoning
+    draft: true
+    max_tokens: [4096]
+    temperature: [0.6]
+    amlt_job_names:
+      - "cosmic-flamingo"
+      - "live-jackal"
+    extra_env:
+      EMB_REASONING_MODE: "1"
+      USE_VIDEO_R1_REASONING_PROMPT: "1"
+      SUPPRESS_ENV_FEEDBACK_ON_ACTION_FAILURE: "1"
+      RUN_HABITAT: "0"
+
+  - prefix: "20251119-no_env_feedback--text-only--baseline-videor1-sft-qwen2.5-vl-7b-instruct--EnsuredReasoning"
+    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/public_pretrained_weights/videor1-Qwen2.5-VL-7B-Instruct/"
+    short_name: no_env_feedback--text-only--baseline-videor1-sft-qwen2.5-vl-7b-instruct--EnsuredReasoning
+    draft: true
+    max_tokens: [4096]
+    temperature: [0.6]
+    amlt_job_names:
+      - "cosmic-flamingo"
+      - "live-jackal"
+    extra_env:
+      EMB_REASONING_MODE: "1"
+      USE_VIDEO_R1_REASONING_PROMPT: "1"
+      RUN_TEXT_ONLY: "1"
+      SUPPRESS_ENV_FEEDBACK_ON_ACTION_FAILURE: "1"
+      RUN_HABITAT: "0"
+
+
+  - prefix: "20251119-final-ablation-1"
+    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-9-reward-zeromaj-pxmc-verifier-forced-reasoning-glm4.5/norq-total-gated-videor1images_pxmc_num3K-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_20/actor/huggingface/"
+    short_name: final-ablation-1
+    draft: true
     max_tokens: [6144, 8192]
     temperature: [0.6]
     amlt_job_names:
-      - "intimate-flea"
-      - "keen-redfish"
+      - "measured-katydid"
+      - "saved-chamois"
+      - "winning-sheepdog"
+      - "allowing-anchovy"
+      
+  - prefix: "20251119-final-ablation-2"
+    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-9-reward-zeromaj-pxmc-verifier-forced-reasoning-glm4.5/norq-total-gated-videor1images_pxmc_num3K-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_10/actor/huggingface/"
+    short_name: final-ablation-2
+    draft: true
+    max_tokens: [6144, 8192]
+    temperature: [0.6]
+    amlt_job_names:
+      - "optimum-snail"
+      - "complete-terrapin"
+      - "new-crane"
+      - "warm-kingfish"
 
-  # ---------------------------------------------------------------------------------------------------------------------------------------
-  # below are drafts waiting for compute
-  #  draft: true
-  # ---------------------------------------------------------------------------------------------------------------------------------------
+  - prefix: "20251120-final-ablation-3"
+    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-9-reward-zeromaj-pxmc-verifier-forced-reasoning-glm4.5/rq0.1-total-gated-videor1images_pxmc_num3K-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_10/actor/huggingface/"
+    short_name: final-ablation-3
+    draft: true # skipping for now to save time
+    max_tokens: [8192]
+    temperature: [0.6]
+    amlt_job_names:
+      - "unbiased-rhino"
+      - "talented-adder"
+      - "lucky-ghost"
+      - "usable-sunbird"
+
+  - prefix: "20251120-final-ablation-4"
+    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-9-reward-zeromaj-pxmc-verifier-forced-reasoning-glm4.5/rq0.1-total-gated-videor1images_pxmc_num3K-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_20/actor/huggingface/"
+    short_name: final-ablation-4
+    draft: true 
+    max_tokens: [8192]
+    temperature: [0.6]
+    amlt_job_names:
+      - "evolved-hedgehog"
+      - "large-jawfish"
+      - "united-gull"
+      - "liked-lamb"
 
 
+  - prefix: "20251120-final-ablation-5"
+    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-9-reward-zeromaj-pxmc-verifier-forced-reasoning-glm4.5/outcome-videor1images_pxmc_num3K-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_20/actor/huggingface/"
+    short_name: final-ablation-5
+    draft: true 
+    max_tokens: [8192]
+    temperature: [0.6]
+    amlt_job_names:
+      - "crucial-perch"
+      - "keen-marmoset"
+      - "more-tuna"
+      - "bursting-grouse"
+
+
+  - prefix: "20251121-text-only--multi-step--final-ablation-5"
+    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-9-reward-zeromaj-pxmc-verifier-forced-reasoning-glm4.5/outcome-videor1images_pxmc_num3K-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_20/actor/huggingface/"
+    draft: true 
+    max_tokens: [8192]
+    temperature: [0.6]
+    amlt_job_names:
+      - "crucial-perch"
+      - "keen-marmoset"
+      - "more-tuna"
+      - "bursting-grouse"
+    extra_env:
+      RUN_TEXT_ONLY: "1"
+      ONLY_ONE_STEP_PLAN: "0"
+      RUN_HABITAT: "0"
+
+  - prefix: "20251121-multi-step--final-ablation-5"
+    model_checkpoint: "/mnt/reuben_models/projects/reubenprojects/magma-reasoning/rl-model-weights/fixed-combined-9-reward-zeromaj-pxmc-verifier-forced-reasoning-glm4.5/outcome-videor1images_pxmc_num3K-rs-rm-2-vis1.0-sa1.0-agentic-functions-verifier-videor1_min_1.5-globalbs-128-updatebs-1-expbs-2-nnodes--2/global_step_20/actor/huggingface/"
+    max_tokens: [8192]
+    temperature: [0.6]
+    amlt_job_names:
+      - "crucial-perch"
+      - "keen-marmoset"
+      - "more-tuna"
+      - "bursting-grouse"
+    extra_env:
+      RUN_TEXT_ONLY: "0"
+      ONLY_ONE_STEP_PLAN: "0"
+      RUN_HABITAT: "0"
 

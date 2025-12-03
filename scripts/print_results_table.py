@@ -461,13 +461,6 @@ def print_aggregated_summary_tables(env_name: str, experiments_data: Dict[str, D
     headers = ["Experiment"] + dimensions_sorted + ["Avg Invalid Action Ratio"]
     rows: List[List[str]] = []
 
-    # Expected number of repetitions per experiment group
-    EXPECTED_REPS = 3
-
-    # Helper to pluralize missing item message
-    def missing_msg(n: int) -> str:
-        return f"{n} item missing" if n == 1 else f"{n} items missing"
-
     # Pandas path
     # pandas is available in this branch; assert for type checkers
     assert pd is not None
@@ -481,7 +474,7 @@ def print_aggregated_summary_tables(env_name: str, experiments_data: Dict[str, D
     )
     # Fix std for single value
     ts_stats_df['std'] = ts_stats_df.apply(
-        lambda r: 0.0 if r['count'] == 1 or math.isnan(r['std']) else r['std'], axis=1
+        lambda r: 0.0 if r['count'] == 1 or pd.isna(r['std']) else r['std'], axis=1
     )
     ts_stats: Dict[Tuple[str, str], Tuple[int, float, float]] = {
         (row.Group, row.Dimension): (int(row['count']), float(row['mean']), float(row['std']))
@@ -502,7 +495,7 @@ def print_aggregated_summary_tables(env_name: str, experiments_data: Dict[str, D
                     .reset_index()
     )
     invalid_stats_df['std'] = invalid_stats_df.apply(
-        lambda r: 0.0 if r['count'] == 1 or math.isnan(r['std']) else r['std'], axis=1
+        lambda r: 0.0 if r['count'] == 1 or pd.isna(r['std']) else r['std'], axis=1
     )
     invalid_stats: Dict[str, Tuple[int, float, float]] = {
         row['Group']: (int(row['count']), float(row['mean']), float(row['std']))
@@ -516,27 +509,23 @@ def print_aggregated_summary_tables(env_name: str, experiments_data: Dict[str, D
             key = (group, dim)
             if key in ts_stats:
                 count_valid, mean, std = ts_stats[key]
-                missing = EXPECTED_REPS - count_valid
                 if count_valid == 0:
                     row_cells.append('no data')
-                elif missing > 0:
-                    row_cells.append(missing_msg(missing))
                 else:
+                    # Show mean ± std regardless of how many reps are present
                     row_cells.append(f"{mean*100:.2f}% ± {std*100:.2f}%")
             else:
                 # Entire dimension absent for this group
-                row_cells.append(missing_msg(EXPECTED_REPS))
+                row_cells.append('-')
         if group in invalid_stats:
             inv_count, inv_mean, inv_std = invalid_stats[group]
-            inv_missing = EXPECTED_REPS - inv_count
             if inv_count == 0:
                 row_cells.append('no data')
-            elif inv_missing > 0:
-                row_cells.append(missing_msg(inv_missing))
             else:
+                # Show mean ± std regardless of how many reps are present
                 row_cells.append(f"{inv_mean:.3f} ± {inv_std:.3f}")
         else:
-            row_cells.append(missing_msg(EXPECTED_REPS))
+            row_cells.append('-')
         rows.append(row_cells)
 
     print(f"\n## Environment: {env_name.upper()} - AGGREGATED SUMMARY (Reworked Mean ± Std of Task Success)\n" )
@@ -678,11 +667,7 @@ def parse_aggregated_table_from_text(text: str, env_name: str) -> Dict[str, Dict
                     exp_data[header] = float(mean_match.group(1)) / 100.0
                 else:
                     exp_data[header] = None
-            elif value_str in ('-', 'N/A', 'no data'):
-                exp_data[header] = None
-            elif 'missing' in value_str.lower():
-                # Mark incomplete data as None, but we should track it exists
-                # Use a special marker to indicate "was present but incomplete"
+            elif value_str in ('-', 'N/A', 'no data', ''):
                 exp_data[header] = None
             else:
                 try:

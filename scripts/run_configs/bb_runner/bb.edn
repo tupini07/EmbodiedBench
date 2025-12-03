@@ -1,0 +1,4 @@
+{:deps {
+        com.lambdaisland/cli {:mvn/version "1.27.121"}
+        metosin/malli {:mvn/version "0.20.0-alpha3"}
+        }}

@@ -1,0 +1,1 @@
+{"project_name": "embodiedbench-clean-2-gcr-ubdesk", "storage_account_name": "atupinirgsa", "container_name": "amulet", "blob_storage_account_name": "atupinirgsa", "registry_name": "projects", "local_path": "/home/rdpuser/EmbodiedBench", "default_output_dir": "/home/rdpuser/EmbodiedBench/amlt", "project_uuid": "7238650249.06428-0c74f967-629f"}

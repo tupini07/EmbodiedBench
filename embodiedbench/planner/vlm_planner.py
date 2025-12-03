@@ -1,3 +1,4 @@
+import traceback
 import torch
 import re
 import os
@@ -225,21 +226,45 @@ class VLMPlanner():
                 out = self.model.respond(self.episode_messages)
                 time.sleep(15)
             except Exception as e:
-                print("[VLMPlanner#act] An unexpected error occurred:", e)
+                error_msg = f"[VLMPlanner#act] Exception during Gemini model.respond: {type(e).__name__}: {str(e)}"
+                print(error_msg)
+                logger.error(error_msg)
+                traceback.print_exc()
+                logger.error(traceback.format_exc())
                 time.sleep(60)
-                out = self.model.respond(self.episode_messages)
+                try:
+                    out = self.model.respond(self.episode_messages)
+                except Exception as e2:
+                    error_msg2 = f"[VLMPlanner#act] Retry also failed: {type(e2).__name__}: {str(e2)}"
+                    print(error_msg2)
+                    logger.error(error_msg2)
+                    traceback.print_exc()
+                    logger.error(traceback.format_exc())
+                    raise
         else:
             try: 
                 out = self.model.respond(self.episode_messages)
             except Exception as e:
-                print("[VLMPlanner#act] An unexpected error occurred:", e)
+                error_msg = f"[VLMPlanner#act] Exception during model.respond: {type(e).__name__}: {str(e)}"
+                print(error_msg)
+                logger.error(error_msg)
+                traceback.print_exc()
+                logger.error(traceback.format_exc())
 
                 if self.model_type != 'local':
                     time.sleep(1)
                 else:
                     time.sleep(1)
 
-                out = self.model.respond(self.episode_messages)
+                try:
+                    out = self.model.respond(self.episode_messages)
+                except Exception as e2:
+                    error_msg2 = f"[VLMPlanner#act] Retry also failed: {type(e2).__name__}: {str(e2)}"
+                    print(error_msg2)
+                    logger.error(error_msg2)
+                    traceback.print_exc()
+                    logger.error(traceback.format_exc())
+                    raise
 
         logger.debug(f"Model Output:\n{out}\n")
         parse_target = out

@@ -3,8 +3,8 @@ description: DEbug inference Help
 target:
   service: sing
   # name: palisades24
-  # name: palisades26
-  name: palisades27
+  name: palisades26
+  # name: palisades27
   # name: msrresrchvc
   # name: msrresrchbasicvc
   # name: msrresrchlabbasic # <- this is the one that has a bunch of v100s

@@ -122,6 +122,7 @@ comments and boxed-JSON post-processing for Qwen reasoning mode were added.
 temperature = float(os.environ.get("REMOTE_MODEL_TEMPERATURE", 0.0))
 max_completion_tokens = int(os.environ.get("REMOTE_MODEL_MAX_TOKENS", 2048))
 remote_url = os.environ.get("remote_url", "").split(",")
+remote_url = [url.strip() for url in remote_url if url.strip()]
 if not isinstance(remote_url, list):
     remote_url = [remote_url]
 
@@ -146,10 +147,10 @@ print(f"VLLM_TOP_P: {vllm_top_p}")
 if len(remote_url) > 0:
     print(f"Using remote model URL(s): {remote_url}")
     all_known_models = []
-    
+
     max_retries = 3
     retry_delay = 2  # seconds
-    
+
     for url in remote_url:
         success = False
         for attempt in range(max_retries):
@@ -166,12 +167,16 @@ if len(remote_url) > 0:
                     print(f"Retrying in {retry_delay} seconds...")
                     time.sleep(retry_delay)
                 else:
-                    print(f"Error querying model name from {url} after {max_retries} attempts: {e}")
-        
+                    print(
+                        f"Error querying model name from {url} after {max_retries} attempts: {e}"
+                    )
+
         if not success:
             print(f"Failed to connect to {url} after all retry attempts")
-    
-    assert len(all_known_models) == len(remote_url), f"All remote_url endpoints must point to a valid model, but some failed."
+
+    assert len(all_known_models) == len(
+        remote_url
+    ), f"All remote_url endpoints must point to a valid model, but some failed."
 
     known_model_names = set(all_known_models)
 
@@ -190,12 +195,12 @@ if len(remote_url) > 0:
         )
         current_model_path = list(known_model_names)[0]
 
-        assert (
-            current_model_path.rstrip("/") == expected_model_path.rstrip("/")
+        assert current_model_path.rstrip("/") == expected_model_path.rstrip(
+            "/"
         ), f"Model path mismatch! Expected to find '{expected_model_path}' in '{current_model_path}'"
 
         print(f"Model path verified successfully.")
-    
+
 
 class RemoteModel:
     def __init__(
@@ -211,12 +216,18 @@ class RemoteModel:
         self.language_only = language_only
         self.task_type = task_type
 
+        self._azure_resources = None
+        self._azure_api_version = None
+
         self.model: OpenAI | list[OpenAI] | lmdeploy.Pipeline = None  # type: ignore
         self._model_rotation_index = 0
 
         if isinstance(remote_url, list):
             # spread requests for different processes to avoid swamping the same URL all the time.
-            self._model_rotation_index = random.randint(0, len(remote_url) - 1)
+            if len(remote_url) > 2:
+                self._model_rotation_index = random.randint(0, len(remote_url) - 1)
+            else:
+                self._model_rotation_index = 0
 
         if self.model_type == "local":
             backend_config = PytorchEngineConfig(
@@ -247,6 +258,18 @@ class RemoteModel:
                 else:
                     # Fallback: use standard public OpenAI client if rotation config invalid.
                     self.model = OpenAI()
+
+            elif self.model_name == "o3":
+                self._azure_resources = [
+                    "https://validator-resource.cognitiveservices.azure.com",
+                    "https://dl-openai-1.openai.azure.com",
+                    "https://dl-openai-3.openai.azure.com",
+                    "https://dl-openai-2.openai.azure.com",
+                ]
+
+                self._azure_api_version = "2025-01-01-preview"
+                self._init_azure_rotation()
+
             elif "qwen" in self.model_name:
                 self.model = OpenAI(
                     api_key=os.getenv("DASHSCOPE_API_KEY"),
@@ -303,19 +326,23 @@ class RemoteModel:
         Returns True if successful, False if fallback to standard OpenAI should occur.
         """
         try:
-            resources_env = os.getenv("AZURE_OPENAI_RESOURCE_NAMES")
-            resources = (
-                _strip_split_csv(resources_env)
-                if resources_env
-                else _default_azure_resource_list()
-            )
-            if not resources:
-                logging.warning(
-                    "No Azure OpenAI resources configured; fallback to OpenAI()."
+            if self._azure_resources is None:
+                resources_env = os.getenv("AZURE_OPENAI_RESOURCE_NAMES")
+                resources = (
+                    _strip_split_csv(resources_env)
+                    if resources_env
+                    else _default_azure_resource_list()
                 )
-                return False
-            self._azure_resources = resources
-            self._azure_api_version = _azure_api_version()
+                if not resources:
+                    logging.warning(
+                        "No Azure OpenAI resources configured; fallback to OpenAI()."
+                    )
+                    return False
+                self._azure_resources = resources
+
+            if self._azure_api_version is None:
+                self._azure_api_version = _azure_api_version()
+
             self._azure_credential = _build_chained_credential()
             scope = _get_scope()
             self._azure_token_provider = get_bearer_token_provider(
@@ -333,15 +360,22 @@ class RemoteModel:
 
     def _get_azure_client(self):
         """Return a rotated AzureOpenAI client (thread-safe)."""
+        assert self._azure_resources is not None
+        assert self._azure_api_version is not None
+
         with self._azure_lock:
             resource = self._azure_resources[
                 self._azure_rr_counter % len(self._azure_resources)
             ]
             self._azure_rr_counter += 1
             if resource not in self._azure_client_cache:
+                azure_endpoint = resource
+                if not azure_endpoint.startswith("https://"):
+                    azure_endpoint = _azure_endpoint(resource)
+
                 self._azure_client_cache[resource] = AzureOpenAI(
                     api_version=self._azure_api_version,
-                    azure_endpoint=_azure_endpoint(resource),
+                    azure_endpoint=azure_endpoint,
                     azure_ad_token_provider=self._azure_token_provider,
                 )
             return self._azure_client_cache[resource]
@@ -354,7 +388,7 @@ class RemoteModel:
                 return self._call_claude(message_history)
             elif "gemini" in self.model_name:
                 return self._call_gemini(message_history)
-            elif "gpt" in self.model_name:
+            elif "gpt" in self.model_name or self.model_name in ["o3"]:
                 return self._call_gpt(message_history)
             elif "qwen" in self.model_name:
                 return self._call_gpt(message_history)
@@ -458,6 +492,8 @@ class RemoteModel:
         return str(response.choices[0].message.parsed.model_dump_json())
 
     def _call_gpt(self, message_history: list):
+        duration_logger = DurationLogger("RemoteModel#_call_gpt")
+
         if not self.language_only:
             if self.task_type == "manip":
                 response_format = dict(
@@ -489,21 +525,180 @@ class RemoteModel:
                     ),
                 )
 
+        if reasoning_mode:
+            response_format = None
+
+        if os.environ.get("DEBUG_REMOTE_MODEL_INPUTS", "0") == "1":
+            print(f"---------------------\nInput to model: \n\n")
+            messages_to_print = json.loads(json.dumps(message_history))
+            try:
+                for msgssc in messages_to_print[0]["content"]:
+                    if "image_url" in msgssc:
+                        img_url = msgssc["image_url"].get("url", "")
+                        if img_url.startswith("data:image"):
+                            # Extract base64 data and decode to get image dimensions
+                            try:
+                                from PIL import Image
+                                import io
+
+                                base64_data = (
+                                    img_url.split(",", 1)[1]
+                                    if "," in img_url
+                                    else img_url
+                                )
+                                img_bytes = base64.b64decode(base64_data)
+                                img = Image.open(io.BytesIO(img_bytes))
+                                print(f"\n[[Image: {img.width}x{img.height} pixels]]\n")
+                            except Exception as e:
+                                print(
+                                    f"\n[[Image: could not decode dimensions - {e}]]\n"
+                                )
+                        else:
+                            print(f"\n[[Image URL: {img_url[:100]}...]]\n")
+                    if "text" in msgssc:
+                        print(f"\n{msgssc['text']}\n")
+            except:
+                print("[[...could not parse message content...]]")
+
+            print(f"\n\n---------------------------------------------------")
+
         # If Azure rotation is configured, obtain a rotated client; else use self.model.
         client = (
             self._get_azure_client()
             if hasattr(self, "_azure_resources")
             else self.model
         )
-        response = self._chat_with_retry(
-            client=client,
-            model=self.model_name,
-            messages=message_history,
-            response_format=response_format,
-            temperature=temperature,
-            max_tokens=max_completion_tokens,
+
+        max_tokens_key = (
+            "max_tokens" if self.model_name not in ["o3"] else "max_completion_tokens"
         )
-        out = response.choices[0].message.content if response else ""
+
+        with duration_logger.extend("model inference"):
+            # ignore 429 errors
+            from openai import APIError, RateLimitError
+
+            attempt = 0
+
+            while True:
+                attempt += 1
+                if attempt > 10:
+                    logging.error(f"Aborting after 10 attempts due to repeated errors.")
+                    return None
+
+                try:
+                    response = client.chat.completions.create(
+                        model=self.model_name,
+                        messages=message_history,
+                        **({"response_format": response_format} if response_format else {}),  # type: ignore
+                        **(
+                            {"temperature": temperature}
+                            if self.model_name not in ["o3"]
+                            else {}
+                        ),
+                        **{max_tokens_key: max_completion_tokens},
+                        **(
+                            {"stop": stop_seqs}
+                            if stop_seqs and self.model_name not in ["o3"]
+                            else {}
+                        ),
+                        **(
+                            {"frequency_penalty": float(vllm_frequency_penalty)}
+                            if vllm_frequency_penalty
+                            else {}
+                        ),
+                        **({"top_p": float(vllm_top_p)} if vllm_top_p else {}),
+                    )  # type: ignore
+
+                    break  # success
+                except RateLimitError as e:  # 429
+                    logging.warning(
+                        f"Rate limited (429); retrying after short delay. Error: {e}"
+                    )
+                    time.sleep(2)
+                    continue
+                except APIError as e:
+                    # Retry on transient server errors (500/502/503/504) if status is available.
+                    status = getattr(e, "status_code", None)
+                    if status in {500, 502, 503, 504}:
+                        logging.warning(
+                            f"Transient API error {status}; retrying after short delay. Error: {e}"
+                        )
+                        time.sleep(2)
+                        continue
+
+                    logging.error(f"Non-retriable API error: {e}")
+                    return None
+                except Exception as e:
+                    # Unexpected error: log and do single short retry; if persists, give up.
+                    logging.warning(f"Unexpected error '{e}'; retrying in short delay")
+                    time.sleep(2)
+                    continue
+
+        out = response.choices[0].message.content
+        if os.environ.get("DEBUG_REMOTE_MODEL_OUTPUTS", "0") == "1":
+            print(
+                f"---------------------------------------------------\nRaw output from model: \n\n{out}\n\n---------------------------------------------------"
+            )
+
+        parsing_duration_logger = duration_logger.extend("parsing")
+        parsing_duration_logger.start()
+
+        if reasoning_mode:
+            # Robust boxed JSON extraction strategy:
+            # 1. Prefer the LAST boxed region (model may self-correct producing multiple boxes)
+            # 2. Fallback to first boxed region (legacy behavior)
+            # 3. Fallback to scanning entire output for first JSON object
+
+            with parsing_duration_logger.extend(
+                "extract_last_box_json(out) or extract_box_json(out)"
+            ):
+                box_json = extract_last_box_json(out) or extract_box_json(out)
+
+            candidate = None
+
+            if box_json:
+                with parsing_duration_logger.extend("sanitize_box_payload(box_json)"):
+                    candidate = sanitize_box_payload(box_json)
+
+            if not candidate:
+                # No boxed payload at all – attempt raw scan for a JSON object in full output
+                with parsing_duration_logger.extend(
+                    "fallback[extract_first_json_object(out)]"
+                ):
+                    fallback_obj = extract_first_json_object(out)
+                    candidate = fallback_obj if fallback_obj else None
+
+            if candidate:
+                with parsing_duration_logger.extend("fix_json"):
+                    out = fix_json(candidate)
+            else:
+                # Leave `out` unchanged; downstream maybe_repair will fail parse and log.
+                pass
+
+        # Always attempt plan validation / repair unless explicitly disabled.
+        # Controlled by PLAN_REPAIR_MODE env (off|log|apply). Default 'apply'.
+        try:
+            with parsing_duration_logger.extend("maybe_repair"):
+                out = maybe_repair(out)
+        except Exception as e:
+            # Fail-safe: never crash the call; log and return original.
+            import logging as _logging
+
+            _logging.warning(f"plan repair failed: {e}")
+
+        parsing_duration_logger.stop()
+
+        if os.environ.get("DEBUG_REMOTE_MODEL_OUTPUTS", "0") == "1":
+            is_json_parseable = False
+            try:
+                _ = json.loads(out)
+                is_json_parseable = True
+            except:
+                is_json_parseable = False
+
+            print(
+                f"---------------------------------------------------\nPost-parse candidate ({is_json_parseable=}): \n\n{out}\n\n---------------------------------------------------"
+            )
 
         return out
 
@@ -646,30 +841,85 @@ class RemoteModel:
         # --------------------------------------------------------------------------------
         # --------------------------------------------------------------------------------
 
+        if os.environ.get("SUPPRESS_ENV_FEEDBACK_ON_ACTION_FAILURE", "0") == "1":
+            # remove any existing feedback messages
+            for msgssc in message_history[0]["content"]:
+                if "text" in msgssc:
+                    message_text = msgssc["text"]
+                    if (
+                        "The action history:" in message_text
+                        and "Considering the above interaction history" in message_text
+                    ):
+                        prior_to_action_history, action_history_section = (
+                            message_text.split("The action history:")
+                        )
+                        action_history_section, after_action_history = (
+                            action_history_section.split(
+                                "Considering the above interaction history"
+                            )
+                        )
+
+                        action_history_lines = []
+                        for line in action_history_section.split("\n"):
+                            if (
+                                line.strip().startswith("Step ")
+                                and "Last action is invalid." in line
+                            ):
+                                # strip everything after "Last action is invalid."
+                                line = (
+                                    line.split("Last action is invalid.")[0]
+                                    + "Last action is invalid."
+                                )
+                            action_history_lines.append(line)
+
+                        action_history_cleaned = "\n".join(action_history_lines)
+                        cleaned_message_text = (
+                            prior_to_action_history
+                            + "The action history:"
+                            + action_history_cleaned
+                            + "Considering the above interaction history"
+                            + after_action_history
+                        )
+                        msgssc["text"] = cleaned_message_text
+
         if os.environ.get("DEBUG_REMOTE_MODEL_INPUTS", "0") == "1":
-            print(
-                f"---------------------\nInput to model: \n\n"
-            )
+            print(f"---------------------\nInput to model: \n\n")
             messages_to_print = json.loads(json.dumps(message_history))
             try:
                 for msgssc in messages_to_print[0]["content"]:
                     if "image_url" in msgssc:
-                        print("\n[[...image url here...]]\n")
+                        img_url = msgssc["image_url"].get("url", "")
+                        if img_url.startswith("data:image"):
+                            # Extract base64 data and decode to get image dimensions
+                            try:
+                                from PIL import Image
+                                import io
+
+                                base64_data = (
+                                    img_url.split(",", 1)[1]
+                                    if "," in img_url
+                                    else img_url
+                                )
+                                img_bytes = base64.b64decode(base64_data)
+                                img = Image.open(io.BytesIO(img_bytes))
+                                print(f"\n[[Image: {img.width}x{img.height} pixels]]\n")
+                            except Exception as e:
+                                print(
+                                    f"\n[[Image: could not decode dimensions - {e}]]\n"
+                                )
+                        else:
+                            print(f"\n[[Image URL: {img_url[:100]}...]]\n")
                     if "text" in msgssc:
                         print(f"\n{msgssc['text']}\n")
             except:
                 print("[[...could not parse message content...]]")
 
-            print(
-                f"\n\n---------------------------------------------------"
-            )
+            print(f"\n\n---------------------------------------------------")
 
         model: Union[OpenAI, list[OpenAI]] = self.model
         if isinstance(model, list):
             model = model[self._model_rotation_index % len(model)]
             self._model_rotation_index += 1
-
-
 
         # todo(atupini) we should probably move all this to a new `call_vllm` method!
         with duration_logger.extend("model inference"):
@@ -680,7 +930,11 @@ class RemoteModel:
                 temperature=temperature,
                 max_tokens=max_completion_tokens,
                 **({"stop": stop_seqs} if stop_seqs else {}),
-                **({"frequency_penalty": float(vllm_frequency_penalty)} if vllm_frequency_penalty else {}),
+                **(
+                    {"frequency_penalty": float(vllm_frequency_penalty)}
+                    if vllm_frequency_penalty
+                    else {}
+                ),
                 **({"top_p": float(vllm_top_p)} if vllm_top_p else {}),
             )  # type: ignore
 

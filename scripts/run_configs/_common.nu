@@ -323,7 +323,7 @@ def run_basic_evals [
     main_job_id: int
 ] {
     # rather than call into bash, implement everything in nu
-    let remote_url = $env.REMOTE_URL? | default 'http://localhost:43289/v1'
+    let remote_url = $env.REMOTE_URL? | default ''
     with-env {
         REMOTE_URL: $remote_url
         remote_url: $remote_url
@@ -338,6 +338,7 @@ def run_basic_evals [
         FORCE_RERUN: ($env.FORCE_RERUN? | default '0')
     } { 
         mkdir "running/dones/"
+    
         let prior_done_file = $"running/dones/($exp_name)_dones.txt"
 
         let prior_done_exists = ($prior_done_file | path exists)
@@ -380,6 +381,7 @@ def run_basic_evals [
         print $"Experiment Name: ($exp_name)"
         print $"Model Name: ($env.MODEL_NAME)"
         print $"REMOTE_URL: ($env.REMOTE_URL)"
+        print $"RUN_TEXT_ONLY: ($env.RUN_TEXT_ONLY)"
         print $"EXTRA_ARGS: ($env.EXTRA_ARGS)"
         print $"EXTRA_ARGS_EB_ALFRED: ($env.EXTRA_ARGS_EB_ALFRED)"
         print $"EXTRA_ARGS_EB_HAB: ($env.EXTRA_ARGS_EB_HAB)"
@@ -435,6 +437,7 @@ def run_basic_evals [
         let parent_job_id = job id
 
         let model_basename = ($env.MODEL_NAME | split row '/' | last)
+        let language_only_value = ($env.RUN_TEXT_ONLY? | default "0")
 
         # EB-ALFRED (parallel over all eval_sets) ---------------------------
         # Always run all supported evaluation sets; user no longer configures subset.
@@ -464,7 +467,7 @@ def run_basic_evals [
                 let log_file = ($alfred_log_dir | path join $"($eval_set).log")
                 print $"[EB-ALFRED] Spawning eval_set='($eval_set)' ..."
                 let jobid = job spawn {
-                    let cmd = $"conda run --no-capture-output -n embench python -m embodiedbench.main env=eb-alf model_name='($env.MODEL_NAME)' exp_name='($exp_name)' eval_sets='[($eval_set)]' ($env.EXTRA_ARGS) ($env.EXTRA_ARGS_EB_ALFRED) > '($log_file)' 2>&1"
+                    let cmd = $"conda run --no-capture-output -n embench python -m embodiedbench.main env=eb-alf model_name='($env.MODEL_NAME)' exp_name='($exp_name)' eval_sets='[($eval_set)]' language_only=($language_only_value) ($env.EXTRA_ARGS) ($env.EXTRA_ARGS_EB_ALFRED) > '($log_file)' 2>&1"
                     let results = (bash -c $cmd | complete)
                     if $results.exit_code != 0 {
                         echo $"[EB-ALFRED] Eval set ($eval_set) failed exit_code=($results.exit_code)"
@@ -514,7 +517,7 @@ def run_basic_evals [
                 let log_file = ($habitat_log_dir | path join $"($eval_set).log")
                 print $"[EB-Habitat] Spawning eval_set='($eval_set)' ..."
                 let jobid = job spawn {
-                    let cmd = $"conda run --no-capture-output -n embench python -m embodiedbench.main env=eb-hab model_name='($env.MODEL_NAME)' exp_name='($exp_name)' eval_sets='[($eval_set)]' ($env.EXTRA_ARGS) ($env.EXTRA_ARGS_EB_HAB) > '($log_file)' 2>&1"
+                    let cmd = $"conda run --no-capture-output -n embench python -m embodiedbench.main env=eb-hab model_name='($env.MODEL_NAME)' exp_name='($exp_name)' eval_sets='[($eval_set)]' language_only=($language_only_value) ($env.EXTRA_ARGS) ($env.EXTRA_ARGS_EB_HAB) > '($log_file)' 2>&1"
                     
                     # habitat only works on gpu, and will fail with a segmentation fault if the GPU is full
                     # so we do a `do while` loop here to retry on segfaults
@@ -530,7 +533,7 @@ def run_basic_evals [
                         # wait 30 min with some jitter of 15 min
                         let sleep_duration = (30 + (random int 0..15))
 
-                        print $"[retry_habitat:($eval_set)] segfault detected; sleeping ($sleep_duration) minutes then retrying..."
+                        # print $"[retry_habitat:($eval_set)] segfault detected; sleeping ($sleep_duration) minutes then retrying..."
 
                         sleep ($"($sleep_duration)min" | into duration)
                     }
@@ -609,7 +612,7 @@ def run_basic_evals [
                         if $pyrep_test.exit_code != 0 {
                             print "[EB-Manipulation] PyRep import failed pre-run test; continuing but evaluation may fail." 
                         }
-                        let cmd = $"conda run --no-capture-output -n embench_man python -m embodiedbench.main env=eb-man model_name='($env.MODEL_NAME)' exp_name='($exp_name)' eval_sets='[($eval_set)]' ($env.EXTRA_ARGS) ($env.EXTRA_ARGS_EB_MAN) > '($log_file)' 2>&1"
+                        let cmd = $"conda run --no-capture-output -n embench_man python -m embodiedbench.main env=eb-man model_name='($env.MODEL_NAME)' exp_name='($exp_name)' eval_sets='[($eval_set)]' language_only=($language_only_value) ($env.EXTRA_ARGS) ($env.EXTRA_ARGS_EB_MAN) > '($log_file)' 2>&1"
                         
                         # EB-Manipulation can fail with CUDA out of memory errors when GPU is full
                         # so we do a `do while` loop here to retry on CUDA OOM errors
@@ -664,10 +667,10 @@ def run_basic_evals [
             mkdir $nav_log_dir | ignore
 
             for eval_set in $navigation_all_sets {
-                let summary_path = $"running/eb_nav/($model_basename)_($exp_name)/($eval_set)/results/summary.json"
+                let summary_path = $"running/eb_nav/($model_basename)_($exp_name)/($eval_set)/results/summary_all.json"
                 let already_done = ($summary_path | path exists)
                 if $already_done and ($env.SKIP_IF_DONE == '1') {
-                    print $"[EB-Navigation][SKIP] summary.json detected for eval_set='($eval_set)' -> skipping"
+                    print $"[EB-Navigation][SKIP] summary_all.json detected for eval_set='($eval_set)' -> skipping"
                     {env: 'nav', set: $eval_set, status: 'done'} | job send $parent_job_id
                     $spawned_navigation_sets = ($spawned_navigation_sets ++ [$eval_set])
                     continue
@@ -677,7 +680,7 @@ def run_basic_evals [
                 let jobid = job spawn {
                     let parent_job_id = job id
                     # AI2-THOR Navigation needs GLX and proper rendering extensions (already set in shared Xvfb)
-                    let cmd = $"conda run --no-capture-output -n embench_nav python -m embodiedbench.main env=eb-nav model_name='($env.MODEL_NAME)' exp_name='($exp_name)' eval_sets='[($eval_set)]' ($env.EXTRA_ARGS) ($env.EXTRA_ARGS_EB_NAV) > '($log_file)' 2>&1"
+                    let cmd = $"conda run --no-capture-output -n embench_nav python -m embodiedbench.main env=eb-nav model_name='($env.MODEL_NAME)' exp_name='($exp_name)' eval_sets='[($eval_set)]' language_only=($language_only_value) ($env.EXTRA_ARGS) ($env.EXTRA_ARGS_EB_NAV) > '($log_file)' 2>&1"
                     let results = (bash -c $cmd | complete)
                     if $results.exit_code != 0 {
                         echo $"[EB-Navigation] Eval set ($eval_set) failed exit_code=($results.exit_code)"
